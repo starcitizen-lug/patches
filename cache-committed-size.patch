@@ -1,0 +1,57 @@
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index 0c0a12c..46ebeaf 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -112,6 +112,9 @@ struct file_view
+     void         *base;          /* base address */
+     size_t        size;          /* size in bytes */
+     unsigned int  protect;       /* protection for all pages at allocation time and SEC_* flags */
++    SIZE_T        last_committed_size;
++    unsigned long long last_commit_size_check;
++    BYTE          first_page_vprot;
+ };
+ 
+ /* per-page protection flags */
+@@ -1624,6 +1627,7 @@ static NTSTATUS create_view( struct file_view **view_ret, void *base, size_t siz
+     view->base    = base;
+     view->size    = size;
+     view->protect = vprot;
++    view->last_commit_size_check = 0;
+     set_page_vprot( base, size, vprot );
+ 
+     register_view( view );
+@@ -5015,6 +5019,12 @@ NTSTATUS WINAPI NtProtectVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_T
+     return status;
+ }
+ 
++static unsigned long long get_current_millis(void)
++{
++    struct timespec cur_time;
++    clock_gettime(CLOCK_MONOTONIC, &cur_time);
++    return cur_time.tv_sec * 1000 + (cur_time.tv_nsec / 1000000);
++}
+ 
+ static unsigned int fill_basic_memory_info( const void *addr, MEMORY_BASIC_INFORMATION *info )
+ {
+@@ -5119,9 +5129,19 @@ static unsigned int fill_basic_memory_info( const void *addr, MEMORY_BASIC_INFOR
+     else
+     {
+         BYTE vprot;
+-
+         info->AllocationBase = alloc_base;
+-        info->RegionSize = get_committed_size( view, base, ~(size_t)0, &vprot, ~VPROT_WRITEWATCH );
++        if (get_current_millis() - view->last_commit_size_check < 4)
++        {
++            info->RegionSize = view->last_committed_size;
++            vprot = view->first_page_vprot;
++        }
++        else
++        {
++            info->RegionSize = get_committed_size( view, base, ~(size_t)0, &vprot, ~VPROT_WRITEWATCH );
++            view->last_committed_size = info->RegionSize;
++            view->first_page_vprot = vprot;
++            view->last_commit_size_check = get_current_millis();
++        }
+         info->State = (vprot & VPROT_COMMITTED) ? MEM_COMMIT : MEM_RESERVE;
+         info->Protect = (vprot & VPROT_COMMITTED) ? get_win32_prot( vprot, view->protect ) : 0;
+         info->AllocationProtect = get_win32_prot( view->protect, view->protect );

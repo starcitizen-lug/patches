@@ -1,0 +1,23 @@
+diff --git a/hw/xwayland/xwayland-input.c b/hw/xwayland/xwayland-input.c
+index 3e06959..b45e386 100644
+--- a/hw/xwayland/xwayland-input.c
++++ b/hw/xwayland/xwayland-input.c
+@@ -3361,9 +3361,6 @@ xwl_seat_emulate_pointer_warp(struct xwl_seat *xwl_seat,
+     if (!xwl_seat_can_emulate_pointer_warp(xwl_seat))
+         return;
+ 
+-    if (xwl_seat->x_cursor != NULL)
+-        return;
+-
+     if (!xwl_seat->pointer_warp_emulator)
+         xwl_seat_create_pointer_warp_emulator(xwl_seat);
+ 
+@@ -3374,6 +3371,8 @@ xwl_seat_emulate_pointer_warp(struct xwl_seat *xwl_seat,
+                                    xwl_window,
+                                    sprite,
+                                    x, y);
++    if (xwl_seat->x_cursor != NULL)
++        xwl_seat_destroy_pointer_warp_emulator(xwl_seat);
+ }
+ 
+ static Bool
