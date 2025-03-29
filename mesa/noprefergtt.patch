@@ -1,0 +1,38 @@
+diff --git a/src/amd/vulkan/radv_debug.h b/src/amd/vulkan/radv_debug.h
+index 2379a1fc364..2565ced6c14 100644
+--- a/src/amd/vulkan/radv_debug.h
++++ b/src/amd/vulkan/radv_debug.h
+@@ -94,6 +94,7 @@ enum {
+    RADV_PERFTEST_NIR_CACHE = 1u << 14,
+    RADV_PERFTEST_RT_WAVE_32 = 1u << 15,
+    RADV_PERFTEST_VIDEO_ENCODE = 1u << 16,
++   RADV_PERFTEST_NO_PREFER_GTT = 1u << 17,
+ };
+ 
+ enum {
+diff --git a/src/amd/vulkan/radv_instance.c b/src/amd/vulkan/radv_instance.c
+index 8104a18d836..0ab48d214be 100644
+--- a/src/amd/vulkan/radv_instance.c
++++ b/src/amd/vulkan/radv_instance.c
+@@ -116,6 +116,7 @@ static const struct debug_control radv_perftest_options[] = {{"localbos", RADV_P
+                                                              {"nircache", RADV_PERFTEST_NIR_CACHE},
+                                                              {"rtwave32", RADV_PERFTEST_RT_WAVE_32},
+                                                              {"video_encode", RADV_PERFTEST_VIDEO_ENCODE},
++                                                             {"noprefergtt", RADV_PERFTEST_NO_PREFER_GTT},
+                                                              {NULL, 0}};
+ 
+ static const struct debug_control radv_trap_excp_options[] = {
+diff --git a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_bo.c b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_bo.c
+index 54c7cefb23c..45dd6b36d96 100644
+--- a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_bo.c
++++ b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_bo.c
+@@ -470,7 +470,8 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned
+        * e.g. Horizon Zero Dawn allocates more memory than we have
+        * VRAM.
+        */
+-      request.preferred_heap |= AMDGPU_GEM_DOMAIN_GTT;
++      if (!(ws->perftest & RADV_PERFTEST_NO_PREFER_GTT))
++         request.preferred_heap |= AMDGPU_GEM_DOMAIN_GTT;
+    }
+ 
+    if (initial_domain & RADEON_DOMAIN_GTT)
