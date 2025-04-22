@@ -1,0 +1,44 @@
+Adds DevicePath to the avicap device property bags and a stub for GetFrameRateList.
+Makes webcam devices show up in Star Citizen.
+diff --git a/dlls/devenum/createdevenum.c b/dlls/devenum/createdevenum.c
+index bc91b23..620a9bd 100644
+--- a/dlls/devenum/createdevenum.c
++++ b/dlls/devenum/createdevenum.c
+@@ -752,6 +752,11 @@ static void register_avicap_devices(void)
+         V_VT(&var) = VT_I4;
+         V_I4(&var) = i;
+         IPropertyBag_Write(prop_bag, L"VFWIndex", &var);
++        VariantClear(&var);
++
++        V_VT(&var) = VT_BSTR;
++        V_BSTR(&var) = SysAllocString(name);
++        IPropertyBag_Write(prop_bag, L"DevicePath", &var);
+ 
+         VariantClear(&var);
+         IPropertyBag_Release(prop_bag);
+diff --git a/dlls/qcap/vfwcapture.c b/dlls/qcap/vfwcapture.c
+index bf3ded9..81297ce 100644
+--- a/dlls/qcap/vfwcapture.c
++++ b/dlls/qcap/vfwcapture.c
+@@ -861,11 +861,19 @@ static HRESULT WINAPI video_control_GetFrameRateList(IAMVideoControl *iface, IPi
+         SIZE dimensions, LONG *list_size, LONGLONG **frame_rate)
+ {
+     struct vfw_capture *filter = impl_from_IAMVideoControl(iface);
++    LONGLONG *rates;
+ 
+     FIXME("filter %p, pin %p, index %ld, dimensions (%ldx%ld), list size %p, frame rate %p, stub.\n",
+             filter, pin, index, dimensions.cx, dimensions.cy, list_size, frame_rate);
+-
+-    return E_NOTIMPL;
++    *list_size = 1;
++    if (frame_rate)
++    {
++        if (!(rates = CoTaskMemAlloc(sizeof(*rates))))
++            return E_OUTOFMEMORY;
++        *frame_rate = rates;
++        rates[0] = 333333;
++    }
++    return S_OK;
+ }
+ 
+ static const IAMVideoControlVtbl IAMVideoControl_VTable =
