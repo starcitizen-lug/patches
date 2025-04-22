@@ -1,0 +1,102 @@
+From d10cb7c4a0ff847fa602d7ae49563aa57ff1719b Mon Sep 17 00:00:00 2001
+From: Vingian <89702391+Vingian@users.noreply.github.com>
+Date: Sat, 15 Mar 2025 10:44:09 -0300
+Subject: [PATCH] Real Path
+
+Some versions of EAC expect the real path in Z: to check integrity and stuff.
+---
+ dlls/ntdll/unix/env.c | 57 +++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 55 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/ntdll/unix/env.c b/dlls/ntdll/unix/env.c
+index 0e49b6f2d063..1b43a3fb0db6 100644
+--- a/dlls/ntdll/unix/env.c
++++ b/dlls/ntdll/unix/env.c
+@@ -2156,6 +2156,49 @@ static BOOL is_console_handle( HANDLE handle )
+                                   &mode, sizeof(mode) ) == STATUS_SUCCESS;
+ }
+ 
++UNICODE_STRING real_path( UNICODE_STRING nt_image )
++{
++    UNICODE_STRING ret = {0};
++    OBJECT_ATTRIBUTES attr;
++    char *unix_path, *real_path;
++    unsigned int path_len;
++    WCHAR *nt_path, Z[] = {'\\','?','?','\\','Z',':'};
++
++    InitializeObjectAttributes( &attr, &nt_image, OBJ_CASE_INSENSITIVE, 0, 0 );
++    if (NT_SUCCESS(nt_to_unix_file_name( &attr, &unix_path, FILE_OPEN )))
++    {
++        real_path = realpath(unix_path, NULL);
++        free( unix_path );
++        if (real_path)
++        {
++            for (unix_path = real_path; *unix_path; *unix_path = *unix_path == '/' ? '\\' : *unix_path, unix_path++);
++            path_len = unix_path - real_path;
++            nt_path = malloc( (path_len + ARRAY_SIZE(Z) + 1) * sizeof(WCHAR) );
++            if (nt_path)
++            {
++                path_len = ntdll_umbstowcs( real_path, path_len, nt_path + ARRAY_SIZE(Z), path_len ) + ARRAY_SIZE(Z);
++                memcpy(nt_path, Z, sizeof(Z));
++                nt_path[path_len] = 0;
++
++                init_unicode_string( &ret, nt_path );
++
++                free( real_path );
++                return ret;
++            }
++            free( real_path );
++        }
++    }
++
++    if (!(ret.Buffer = malloc( nt_image.Length + sizeof(WCHAR) )))
++        return ret;
++
++    ret.Length = nt_image.Length;
++    memcpy( ret.Buffer, nt_image.Buffer, nt_image.Length );
++    ret.Buffer[nt_image.Length / sizeof(WCHAR)] = 0;
++
++    return ret;
++}
++
+ /***********************************************************************
+  *           create_startup_info
+  */
+@@ -2164,10 +2207,13 @@ void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
+                            const struct pe_image_info *pe_info, DWORD *info_size )
+ {
+     struct startup_info_data *info;
+-    UNICODE_STRING dos_image = *nt_image;
++    UNICODE_STRING dos_image, real_image;
+     DWORD size;
+     void *ptr;
+ 
++    real_image = real_path( *nt_image );
++    if (real_image.Buffer) nt_image = &real_image;
++
+     dos_image.Buffer = get_dos_path( nt_image->Buffer );
+     dos_image.Length = nt_image->Length - (dos_image.Buffer - nt_image->Buffer) * sizeof(WCHAR);
+ 
+@@ -2183,7 +2229,11 @@ void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
+     size = (size + 1) & ~1;
+     *info_size = size;
+ 
+-    if (!(info = calloc( size, 1 ))) return NULL;
++    if (!(info = calloc( size, 1 )))
++    {
++        free( real_image.Buffer );
++        return NULL;
++    }
+ 
+     info->debug_flags   = params->DebugFlags;
+     info->console_flags = params->ConsoleFlags;
+@@ -2219,6 +2269,9 @@ void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
+     info->desktop_len = append_string( &ptr, params, &params->Desktop );
+     info->shellinfo_len = append_string( &ptr, params, &params->ShellInfo );
+     info->runtime_len = append_string( &ptr, params, &params->RuntimeInfo );
++
++    free( real_image.Buffer );
++
+     return info;
+ }
+ 
