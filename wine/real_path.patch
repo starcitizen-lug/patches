@@ -1,60 +1,44 @@
-From d10cb7c4a0ff847fa602d7ae49563aa57ff1719b Mon Sep 17 00:00:00 2001
+From 5613b9eb0ab964350f42f5d5e1badd910c9188e3 Mon Sep 17 00:00:00 2001
 From: Vingian <89702391+Vingian@users.noreply.github.com>
-Date: Sat, 15 Mar 2025 10:44:09 -0300
+Date: Sun, 29 Jun 2025 15:46:17 -0300
 Subject: [PATCH] Real Path
 
 Some versions of EAC expect the real path in Z: to check integrity and stuff.
 ---
- dlls/ntdll/unix/env.c | 57 +++++++++++++++++++++++++++++++++++++++++--
- 1 file changed, 55 insertions(+), 2 deletions(-)
+ dlls/ntdll/unix/env.c          | 36 ++++++++++++++++++++++++++++++++--
+ dlls/ntdll/unix/process.c      |  2 +-
+ dlls/ntdll/unix/unix_private.h |  2 +-
+ 3 files changed, 36 insertions(+), 4 deletions(-)
 
 diff --git a/dlls/ntdll/unix/env.c b/dlls/ntdll/unix/env.c
-index 0e49b6f2d063..1b43a3fb0db6 100644
+index 9edb69dd519..d1eb082078a 100644
 --- a/dlls/ntdll/unix/env.c
 +++ b/dlls/ntdll/unix/env.c
-@@ -2156,6 +2156,49 @@ static BOOL is_console_handle( HANDLE handle )
+@@ -2190,17 +2190,46 @@ static BOOL is_console_handle( HANDLE handle )
                                    &mode, sizeof(mode) ) == STATUS_SUCCESS;
  }
  
-+UNICODE_STRING real_path( UNICODE_STRING nt_image )
++UNICODE_STRING real_path( const char *unix_image )
 +{
 +    UNICODE_STRING ret = {0};
-+    OBJECT_ATTRIBUTES attr;
 +    char *unix_path, *real_path;
 +    unsigned int path_len;
 +    WCHAR *nt_path, Z[] = {'\\','?','?','\\','Z',':'};
 +
-+    InitializeObjectAttributes( &attr, &nt_image, OBJ_CASE_INSENSITIVE, 0, 0 );
-+    if (NT_SUCCESS(nt_to_unix_file_name( &attr, &unix_path, FILE_OPEN )))
++    if ((real_path = realpath( unix_image, NULL )))
 +    {
-+        real_path = realpath(unix_path, NULL);
-+        free( unix_path );
-+        if (real_path)
++        for (unix_path = real_path; *unix_path; *unix_path = *unix_path == '/' ? '\\' : *unix_path, unix_path++);
++        path_len = unix_path - real_path;
++        if ((nt_path = malloc( (path_len + ARRAY_SIZE(Z) + 1) * sizeof(WCHAR) )))
 +        {
-+            for (unix_path = real_path; *unix_path; *unix_path = *unix_path == '/' ? '\\' : *unix_path, unix_path++);
-+            path_len = unix_path - real_path;
-+            nt_path = malloc( (path_len + ARRAY_SIZE(Z) + 1) * sizeof(WCHAR) );
-+            if (nt_path)
-+            {
-+                path_len = ntdll_umbstowcs( real_path, path_len, nt_path + ARRAY_SIZE(Z), path_len ) + ARRAY_SIZE(Z);
-+                memcpy(nt_path, Z, sizeof(Z));
-+                nt_path[path_len] = 0;
++            path_len = ntdll_umbstowcs( real_path, path_len, nt_path + ARRAY_SIZE(Z), path_len ) + ARRAY_SIZE(Z);
++            memcpy(nt_path, Z, sizeof(Z));
++            nt_path[path_len] = 0;
 +
-+                init_unicode_string( &ret, nt_path );
-+
-+                free( real_path );
-+                return ret;
-+            }
-+            free( real_path );
++            init_unicode_string( &ret, nt_path );
 +        }
++        free( real_path );
 +    }
-+
-+    if (!(ret.Buffer = malloc( nt_image.Length + sizeof(WCHAR) )))
-+        return ret;
-+
-+    ret.Length = nt_image.Length;
-+    memcpy( ret.Buffer, nt_image.Buffer, nt_image.Length );
-+    ret.Buffer[nt_image.Length / sizeof(WCHAR)] = 0;
 +
 +    return ret;
 +}
@@ -62,41 +46,64 @@ index 0e49b6f2d063..1b43a3fb0db6 100644
  /***********************************************************************
   *           create_startup_info
   */
-@@ -2164,10 +2207,13 @@ void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
+-void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
++void *create_startup_info( const UNICODE_STRING *nt_image, const char *unix_image, ULONG process_flags,
+                            const RTL_USER_PROCESS_PARAMETERS *params,
                             const struct pe_image_info *pe_info, DWORD *info_size )
  {
      struct startup_info_data *info;
--    UNICODE_STRING dos_image = *nt_image;
-+    UNICODE_STRING dos_image, real_image;
++    UNICODE_STRING real_image;
      DWORD size;
      void *ptr;
  
-+    real_image = real_path( *nt_image );
++    real_image = real_path( unix_image );
 +    if (real_image.Buffer) nt_image = &real_image;
 +
-     dos_image.Buffer = get_dos_path( nt_image->Buffer );
-     dos_image.Length = nt_image->Length - (dos_image.Buffer - nt_image->Buffer) * sizeof(WCHAR);
- 
-@@ -2183,7 +2229,11 @@ void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
+     size = sizeof(*info);
+     size += params->CurrentDirectory.DosPath.Length;
+     size += params->DllPath.Length;
+@@ -2213,7 +2242,7 @@ void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
      size = (size + 1) & ~1;
      *info_size = size;
  
 -    if (!(info = calloc( size, 1 ))) return NULL;
-+    if (!(info = calloc( size, 1 )))
-+    {
-+        free( real_image.Buffer );
-+        return NULL;
-+    }
++    if (!(info = calloc( size, 1 ))) goto done;
  
      info->debug_flags   = params->DebugFlags;
      info->console_flags = params->ConsoleFlags;
-@@ -2219,6 +2269,9 @@ void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
+@@ -2249,6 +2278,9 @@ void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
      info->desktop_len = append_string( &ptr, params, &params->Desktop );
      info->shellinfo_len = append_string( &ptr, params, &params->ShellInfo );
      info->runtime_len = append_string( &ptr, params, &params->RuntimeInfo );
 +
++done:
 +    free( real_image.Buffer );
-+
      return info;
  }
  
+diff --git a/dlls/ntdll/unix/process.c b/dlls/ntdll/unix/process.c
+index 727b6dd9380..37410e6e8b3 100644
+--- a/dlls/ntdll/unix/process.c
++++ b/dlls/ntdll/unix/process.c
+@@ -794,7 +794,7 @@ NTSTATUS WINAPI NtCreateUserProcess( HANDLE *process_handle_ptr, HANDLE *thread_
+         if (is_arm64ec() && pe_info.is_hybrid && machine == IMAGE_FILE_MACHINE_ARM64)
+             machine = main_image_info.Machine;
+     }
+-    if (!(startup_info = create_startup_info( attr.ObjectName, process_flags, params, &pe_info, &startup_info_size )))
++    if (!(startup_info = create_startup_info( attr.ObjectName, unix_name, process_flags, params, &pe_info, &startup_info_size )))
+         goto done;
+     env_size = get_env_size( params, &winedebug );
+ 
+diff --git a/dlls/ntdll/unix/unix_private.h b/dlls/ntdll/unix/unix_private.h
+index a735e54d9ff..1ebc55612d3 100644
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -206,7 +206,7 @@ extern struct ldt_copy __wine_ldt_copy;
+ 
+ extern void init_environment(void);
+ extern void init_startup_info(void);
+-extern void *create_startup_info( const UNICODE_STRING *nt_image, ULONG process_flags,
++extern void *create_startup_info( const UNICODE_STRING *nt_image, const char *unix_image, ULONG process_flags,
+                                   const RTL_USER_PROCESS_PARAMETERS *params,
+                                   const struct pe_image_info *pe_info, DWORD *info_size );
+ extern char **build_envp( const WCHAR *envW );
