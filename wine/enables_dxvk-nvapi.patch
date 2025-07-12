@@ -1,0 +1,23 @@
+From 97b6640dbdfd0b5f325d76419fddbf0fddac86e9 Mon Sep 17 00:00:00 2001
+From: Vingian <89702391+Vingian@users.noreply.github.com>
+Date: Sat, 12 Jul 2025 01:10:59 -0300
+Subject: [PATCH] Enables dxvk-nvapi
+
+Enables dxvk-nvapi by default. If needed... can be disabled by setting to 0.
+---
+ dlls/ntdll/unix/loader.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/dlls/ntdll/unix/loader.c b/dlls/ntdll/unix/loader.c
+index 68cd4f50420..2d188b92b55 100644
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -2182,6 +2182,8 @@ DECLSPEC_EXPORT void __wine_main( int argc, char *argv[] )
+     virtual_init();
+     init_environment();
+ 
++    setenv("DXVK_ENABLE_NVAPI", "1", 0);
++
+ #ifdef __APPLE__
+     apple_main_thread();
+ #endif

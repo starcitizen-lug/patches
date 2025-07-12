@@ -1,0 +1,125 @@
+From 643b1bb65d8f4317ccecc56ec118cb47b579d27e Mon Sep 17 00:00:00 2001
+From: Vingian <89702391+Vingian@users.noreply.github.com>
+Date: Sat, 12 Jul 2025 02:28:36 -0300
+Subject: [PATCH] Append commands
+
+Inspired by https://github.com/ValveSoftware/wine/commit/d7ba7d8ffd88d1c2f637af90cc13730d1c0c43ea ... append commands to fixes some issues depending on the display system in use.
+---
+ dlls/ntdll/env.c             | 53 ++++++++++++++++++++++++++++++++++--
+ programs/explorer/desktop.c  |  3 ++
+ programs/wineboot/wineboot.c |  2 ++
+ 3 files changed, 55 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/ntdll/env.c b/dlls/ntdll/env.c
+index 7fae94f3b52..2771812e021 100644
+--- a/dlls/ntdll/env.c
++++ b/dlls/ntdll/env.c
+@@ -672,6 +672,46 @@ void WINAPI RtlDestroyProcessParameters( RTL_USER_PROCESS_PARAMETERS *params )
+     RtlFreeHeap( GetProcessHeap(), 0, params );
+ }
+ 
++static UNICODE_STRING hack_append_command_line( WCHAR *env, UNICODE_STRING image, UNICODE_STRING cmdline )
++{
++    UNICODE_STRING ret = {0};
++    RTL_ATOM atom;
++    BOOL is_wayland = NT_SUCCESS(NtFindAtom( L"WINE_IS_WAYLAND", 15 * sizeof(WCHAR), &atom )) && atom;
++
++    static const struct
++    {
++        const UNICODE_STRING exe_name;
++        const BOOL launcher;
++        const WCHAR *append;
++        const WCHAR *append_wayland;
++    }
++    options[] =
++    {
++        {RTL_CONSTANT_STRING(L"RSI Launcher.exe"), TRUE, L" --in-process-gpu --no-deprecation --log-level=3", L" --in-process-gpu --disable-gpu --no-deprecation --log-level=3"},
++        {RTL_CONSTANT_STRING(L"StarCitizen.exe"), FALSE, NULL, L" +pl_pit.forceSoftwareCursor=1"}
++    };
++
++    for (unsigned int i = 0, x; i < ARRAY_SIZE(options); ++i)
++    {
++        const UNICODE_STRING *s1 = &options[i].exe_name, *s2 = &image;
++        if (options[i].launcher && cmdline.Length > image.Length + 2 * sizeof(WCHAR)) continue;
++        if (s1->Length > s2->Length) continue;
++        x = (s2->Length - s1->Length) / sizeof(WCHAR);
++        if (!RtlCompareUnicodeStrings( s1->Buffer, s1->Length / sizeof(WCHAR), s2->Buffer + x, s1->Length / sizeof(WCHAR), TRUE ) && (!x || s2->Buffer[x - 1] == '\\'))
++        {
++            const WCHAR *append = is_wayland ? options[i].append_wayland : options[i].append;
++            if (append)
++            {
++                ret.MaximumLength = cmdline.Length + wcslen(append) * sizeof(WCHAR) + sizeof(WCHAR);
++                ret.Buffer = RtlAllocateHeap( GetProcessHeap(), 0, ret.MaximumLength );
++                RtlCopyUnicodeString( &ret, &cmdline );
++                RtlAppendUnicodeToString( &ret, append );
++            }
++            break;
++        }
++    }
++    return ret;
++}
+ 
+ /***********************************************************************
+  *           init_user_process_params
+@@ -683,7 +723,7 @@ void init_user_process_params(void)
+     WCHAR *env;
+     SIZE_T size = 0, env_size;
+     RTL_USER_PROCESS_PARAMETERS *new_params, *params = NtCurrentTeb()->Peb->ProcessParameters;
+-    UNICODE_STRING curdir;
++    UNICODE_STRING curdir, *cmdline, x;
+ 
+     /* environment needs to be a separate memory block */
+     env_size = params->EnvironmentSize;
+@@ -693,11 +733,15 @@ void init_user_process_params(void)
+         else env[0] = 0;
+     }
+ 
++    cmdline = &params->CommandLine;
++    x = hack_append_command_line( env, params->ImagePathName, params->CommandLine );
++    if (x.Buffer) cmdline = &x;
++
+     if (!(new_params = alloc_process_params( 1, &params->ImagePathName, &params->DllPath,
+-                                             &params->CurrentDirectory.DosPath, &params->CommandLine,
++                                             &params->CurrentDirectory.DosPath, cmdline,
+                                              NULL, &params->WindowTitle, &params->Desktop,
+                                              &params->ShellInfo, &params->RuntimeInfo )))
+-        return;
++        goto done;
+ 
+     new_params->Environment     = env;
+     new_params->DebugFlags      = params->DebugFlags;
+@@ -729,4 +773,7 @@ void init_user_process_params(void)
+     }
+     set_wow64_environment( &new_params->Environment );
+     new_params->EnvironmentSize = RtlSizeHeap( GetProcessHeap(), 0, new_params->Environment );
++
++done:
++    RtlFreeUnicodeString( &x );
+ }
+diff --git a/programs/explorer/desktop.c b/programs/explorer/desktop.c
+index e0b57a4b37f..0acba14097f 100644
+--- a/programs/explorer/desktop.c
++++ b/programs/explorer/desktop.c
+@@ -1052,6 +1052,9 @@ static void load_graphics_driver( const WCHAR *driver, GUID *guid )
+ 
+     TRACE( "display %s driver %s\n", debugstr_guid(guid), debugstr_w(libname) );
+ 
++    if (!wcsicmp( libname, L"winewayland.drv" ))
++        GlobalAddAtomW( L"WINE_IS_WAYLAND" );
++
+     swprintf( key, ARRAY_SIZE(key), device_keyW, guid->Data1, guid->Data2, guid->Data3,
+               guid->Data4[0], guid->Data4[1], guid->Data4[2], guid->Data4[3],
+               guid->Data4[4], guid->Data4[5], guid->Data4[6], guid->Data4[7] );
+diff --git a/programs/wineboot/wineboot.c b/programs/wineboot/wineboot.c
+index 1b04fd3b202..3b975faae5d 100644
+--- a/programs/wineboot/wineboot.c
++++ b/programs/wineboot/wineboot.c
+@@ -1660,6 +1660,8 @@ static void update_wineprefix( BOOL force )
+     int fd;
+     struct stat st;
+ 
++    if (!force) UnregisterClassW( L"", NULL );
++
+     if (!inf_path)
+     {
+         WINE_MESSAGE( "wine: failed to update %s, wine.inf not found\n", debugstr_w( config_dir ));

@@ -1,0 +1,24 @@
+From c32715b00dc3c4fd9ad7b3fccb1a9783edaca1e2 Mon Sep 17 00:00:00 2001
+From: Vingian <89702391+Vingian@users.noreply.github.com>
+Date: Sat, 12 Jul 2025 01:05:54 -0300
+Subject: [PATCH] Dummy dlls to satisfy some checks
+
+Creates the dummy dlls needed to satisfy some checks.
+---
+ loader/wine.inf.in | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/loader/wine.inf.in b/loader/wine.inf.in
+index e3426b7ec95..0d9d9408770 100644
+--- a/loader/wine.inf.in
++++ b/loader/wine.inf.in
+@@ -2245,6 +2245,9 @@ HKLM,%CurrentVersion%\Telephony\Country List\998,"SameAreaRule",,"G"
+ 11,,regasm.exe,-
+ 11,,servicemodelreg.exe,-
+ 11,,presentationfontcache.exe,-
++; dummy dlls
++11,,devobj.dll,security.dll
++11,,drvstore.dll,security.dll
+ ; registration order matters for these
+ 11,,msxml.dll
+ 11,,msxml2.dll

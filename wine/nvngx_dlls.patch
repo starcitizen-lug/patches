@@ -1,0 +1,100 @@
+From f5e1b269da0cf9c0e5cdca43b3994ada4f8b0b16 Mon Sep 17 00:00:00 2001
+From: Vingian <89702391+Vingian@users.noreply.github.com>
+Date: Sat, 12 Jul 2025 00:51:49 -0300
+Subject: [PATCH] Automate nvngx dlls setup
+
+Automatically detects nvidia nvngx dlls from the driver installation, creates symlinks to them in the wine prefix if needed and sets the path in the registry.
+---
+ loader/wine.inf.in |  1 +
+ server/main.c      | 52 ++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 53 insertions(+)
+
+diff --git a/loader/wine.inf.in b/loader/wine.inf.in
+index e3426b7ec95..53d09b9b3f9 100644
+--- a/loader/wine.inf.in
++++ b/loader/wine.inf.in
+@@ -450,6 +450,7 @@ HKCU,Software\Wine\Debug,"RelayExclude",2,"ntdll.RtlEnterCriticalSection;ntdll.R
+ HKCU,Software\Wine\Debug,"RelayFromExclude",2,"winex11.drv;winemac.drv;user32;gdi32;advapi32;kernel32"
+ 
+ [DirectX]
++HKLM,Software\NVIDIA Corporation\Global\NGXCore,"FullPath",,"C:\Windows\System32"
+ HKLM,Software\Microsoft\DirectX,"Version",,"4.09.00.0904"
+ HKLM,Software\Microsoft\DirectX,"InstalledVersion",1,00,00,00,09,00,00,00,00
+ HKLM,Software\Microsoft\DirectMusic,GMFilePath,,"%12%\gm.dls"
+diff --git a/server/main.c b/server/main.c
+index 1248b92f24d..06cb2894683 100644
+--- a/server/main.c
++++ b/server/main.c
+@@ -29,6 +29,12 @@
+ #include <sys/time.h>
+ #include <unistd.h>
+ 
++#if defined(__x86_64__)
++# include <sys/stat.h>
++# include <dlfcn.h>
++# include <libgen.h>
++#endif
++
+ #include "object.h"
+ #include "file.h"
+ #include "thread.h"
+@@ -212,6 +218,51 @@ static void sigterm_handler( int signum )
+     exit(1);  /* make sure atexit functions get called */
+ }
+ 
++static void symlink_nvidia_wine_dlls( int pfx_dir_fd )
++{
++#if defined(__x86_64__)
++    char *dlls[] = { "_nvngx.dll", "nvngx.dll", "nvngx_dlssg.dll" };
++    char lib[] = "libGLX_nvidia.so.0";
++    char sub_dir[] = "/nvidia/wine";
++    int sys32_dir_fd = pfx_dir_fd >= 0 ? openat( pfx_dir_fd, "drive_c/windows/system32", O_RDONLY | O_DIRECTORY ) : -1;
++    if (sys32_dir_fd == -1) return;
++
++    unsigned int i;
++    struct stat buf;
++    for (i = 0; i < ARRAY_SIZE( dlls ) && !fstatat( sys32_dir_fd, dlls[i], &buf, AT_SYMLINK_NOFOLLOW ) && S_ISLNK( buf.st_mode ); i++);
++
++    void *hlib;
++    if ((i < ARRAY_SIZE( dlls ) || fstatat( sys32_dir_fd, dlls[0], &buf, 0 )) && (hlib = dlopen( lib, RTLD_LAZY ))) {
++        Dl_info info;
++        char *lib_path;
++        if (dladdr( dlsym( hlib, "glXCreateContext" ), &info ) && (lib_path = realpath( info.dli_fname, NULL ))) {
++            char *lib_dir = dirname( lib_path ), *dll_dir;
++            if ((dll_dir = malloc( strlen( lib_dir ) + sizeof( sub_dir ) ))) {
++                strcpy( dll_dir, lib_dir );
++                strcat( dll_dir, sub_dir );
++                if (!stat( dll_dir, &buf ) && S_ISDIR( buf.st_mode ))
++                    for (i = 0; i < ARRAY_SIZE( dlls ); i++) {
++                        char *dll_path = malloc( strlen( dll_dir ) + strlen( dlls[i] ) + 2 );
++                        if (dll_path) {
++                            strcpy( dll_path, dll_dir );
++                            strcat( dll_path, "/" );
++                            strcat( dll_path, dlls[i] );
++                            unlinkat( sys32_dir_fd, dlls[i], 0 );
++                            symlinkat( dll_path, sys32_dir_fd, dlls[i] );
++                            free( dll_path );
++                        }
++                    }
++                free( dll_dir );
++            }
++            free( lib_path );
++        }
++        dlclose( hlib );
++    }
++
++    close( sys32_dir_fd );
++#endif
++}
++
+ int main( int argc, char *argv[] )
+ {
+     setvbuf( stderr, NULL, _IOLBF, 0 );
+@@ -235,6 +286,7 @@ int main( int argc, char *argv[] )
+     init_memory();
+     init_directories( load_intl_file() );
+     init_registry();
++    symlink_nvidia_wine_dlls( config_dir_fd );
+     main_loop();
+     return 0;
+ }
