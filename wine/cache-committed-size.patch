@@ -1,8 +1,18 @@
+From 76298766c21cc652283db4ff70902dae43373579 Mon Sep 17 00:00:00 2001
+From: Jack Greiner <jack@emoss.org>
+Date: Mon, 14 Jul 2025 15:57:25 -0400
+Subject: [PATCH] cache-committed-size patch
+
+This improves the speed of get_committed_size which assists in Star Citizen in loading correctly with various debugging bits enabled.
+---
+ dlls/ntdll/unix/virtual.c | 25 ++++++++++++++++++++++---
+ 1 file changed, 22 insertions(+), 3 deletions(-)
+
 diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
-index 0c0a12c..46ebeaf 100644
+index e733e3ffdd6..f7b41c39274 100644
 --- a/dlls/ntdll/unix/virtual.c
 +++ b/dlls/ntdll/unix/virtual.c
-@@ -112,6 +112,9 @@ struct file_view
+@@ -129,6 +129,9 @@ struct file_view
      void         *base;          /* base address */
      size_t        size;          /* size in bytes */
      unsigned int  protect;       /* protection for all pages at allocation time and SEC_* flags */
@@ -12,15 +22,15 @@ index 0c0a12c..46ebeaf 100644
  };
  
  /* per-page protection flags */
-@@ -1624,6 +1627,7 @@ static NTSTATUS create_view( struct file_view **view_ret, void *base, size_t siz
+@@ -1848,6 +1851,7 @@ static NTSTATUS create_view( struct file_view **view_ret, void *base, size_t siz
      view->base    = base;
      view->size    = size;
      view->protect = vprot;
 +    view->last_commit_size_check = 0;
+     if (use_kernel_writewatch) vprot &= ~VPROT_WRITEWATCH;
      set_page_vprot( base, size, vprot );
  
-     register_view( view );
-@@ -5015,6 +5019,12 @@ NTSTATUS WINAPI NtProtectVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_T
+@@ -5406,6 +5410,12 @@ NTSTATUS WINAPI NtProtectVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_T
      return status;
  }
  
@@ -33,12 +43,12 @@ index 0c0a12c..46ebeaf 100644
  
  static unsigned int fill_basic_memory_info( const void *addr, MEMORY_BASIC_INFORMATION *info )
  {
-@@ -5119,9 +5129,19 @@ static unsigned int fill_basic_memory_info( const void *addr, MEMORY_BASIC_INFOR
+@@ -5510,9 +5520,18 @@ static unsigned int fill_basic_memory_info( const void *addr, MEMORY_BASIC_INFOR
      else
      {
          BYTE vprot;
 -
-         info->AllocationBase = alloc_base;
+-        info->AllocationBase = alloc_base;
 -        info->RegionSize = get_committed_size( view, base, ~(size_t)0, &vprot, ~VPROT_WRITEWATCH );
 +        if (get_current_millis() - view->last_commit_size_check < 4)
 +        {
@@ -55,3 +65,5 @@ index 0c0a12c..46ebeaf 100644
          info->State = (vprot & VPROT_COMMITTED) ? MEM_COMMIT : MEM_RESERVE;
          info->Protect = (vprot & VPROT_COMMITTED) ? get_win32_prot( vprot, view->protect ) : 0;
          info->AllocationProtect = get_win32_prot( view->protect, view->protect );
+-- 
+2.50.1
