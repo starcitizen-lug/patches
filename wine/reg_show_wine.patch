@@ -1,0 +1,11 @@
+diff --git a/loader/wine.inf.in b/loader/wine.inf.in
+--- a/loader/wine.inf.in
++++ b/loader/wine.inf.in
+@@ -560,6 +560,7 @@
+ HKLM,%MciExtStr%,"wvx",,"MPEGVideo"
+ 
+ [Misc]
++HKCU,Software\Wine\AppDefaults\starcitizen.exe,"HideWineExports",2,"N"
+ HKLM,Software\Borland\Database Engine\Settings\SYSTEM\INIT,SHAREDMEMLOCATION,,9000
+ HKLM,Software\Clients,,16
+ HKLM,Software\Clients\Mail,,2,"Native Mail Client"
