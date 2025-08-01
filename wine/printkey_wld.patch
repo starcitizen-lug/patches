@@ -1,0 +1,12 @@
+diff --git a/dlls/winewayland.drv/wayland_keyboard.c b/dlls/winewayland.drv/wayland_keyboard.c
+--- a/dlls/winewayland.drv/wayland_keyboard.c
++++ b/dlls/winewayland.drv/wayland_keyboard.c
+@@ -156,7 +156,7 @@
+     switch (key)
+     {
+     case 84 /* ISO_Level3_Shift */: return 0x005a; /* T5A / VK_OEM_WSCTRL */
+-    case KEY_SYSRQ: return 0x0054; /* T54 / VK_SNAPSHOT */
++    case KEY_SYSRQ: return 0x0137; /* X37 / VK_SNAPSHOT */
+     case KEY_102ND: return 0x0056; /* T56 / VK_OEM_102 */
+     case KEY_F11: return 0x0057; /* T57 / VK_F11 */
+     case KEY_F12: return 0x0058; /* T58 / VK_F12 */

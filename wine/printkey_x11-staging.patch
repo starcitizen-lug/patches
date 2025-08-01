@@ -1,0 +1,24 @@
+diff --git a/dlls/winex11.drv/x11drv_main.c b/dlls/winex11.drv/x11drv_main.c
+--- a/dlls/winex11.drv/x11drv_main.c
++++ b/dlls/winex11.drv/x11drv_main.c
+@@ -73,7 +73,7 @@
+ BOOL use_system_cursors = TRUE;
+ BOOL grab_fullscreen = FALSE;
+ int keyboard_layout = -1;
+-BOOL keyboard_scancode_detect = FALSE;
++BOOL keyboard_scancode_detect = TRUE;
+ BOOL managed_mode = TRUE;
+ BOOL private_color_map = FALSE;
+ int primary_monitor = 0;
+diff --git a/programs/winecfg/input.c b/programs/winecfg/input.c
+--- a/programs/winecfg/input.c
++++ b/programs/winecfg/input.c
+@@ -65,7 +65,7 @@
+     else SendMessageW( layouts, CB_SELECTSTRING, -1, (LPARAM)buffer );
+     free( buffer );
+ 
+-    buffer = get_reg_key( config_key, keypath( L"X11 Driver" ), L"KeyboardScancodeDetect", L"N" );
++    buffer = get_reg_key( config_key, keypath( L"X11 Driver" ), L"KeyboardScancodeDetect", L"Y" );
+     if (IS_OPTION_TRUE( *buffer )) CheckDlgButton( dialog, IDC_KEYBOARD_SCANCODE_DETECT, BST_CHECKED );
+     else CheckDlgButton( dialog, IDC_KEYBOARD_SCANCODE_DETECT, BST_UNCHECKED );
+     free( buffer );
