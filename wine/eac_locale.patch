@@ -1,0 +1,44 @@
+From 9c68af0c3002a3fd6160c5d66d471a8d95337763 Mon Sep 17 00:00:00 2001
+From: Vingian <89702391+Vingian@users.noreply.github.com>
+Date: Mon, 12 May 2025 12:25:57 -0300
+Subject: [PATCH] ntdll: HACK: Force en-US locale for EAC launcher.
+
+For certain locales, the EAC launcher requires specific fonts that are unavailable in Wine, resulting in an error.
+This modification forces en-US as the locale for some known EAC launchers.
+
+Adapted from commit: ValveSoftware/wine@690273a44e04957b9e8bdfac56d895dde4653fd7
+---
+ dlls/ntdll/unix/env.c | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/unix/env.c b/dlls/ntdll/unix/env.c
+index 0e49b6f2d06..a7140f59da5 100644
+--- a/dlls/ntdll/unix/env.c
++++ b/dlls/ntdll/unix/env.c
+@@ -803,7 +803,11 @@ static void init_locale(void)
+     struct locale_nls_header *header;
+     const NLS_LOCALE_HEADER *locale_table;
+     const NLS_LOCALE_DATA *locale;
+-    char *p;
++    char *p, *eac_launchers[] = {
++        "start_protected_game.exe",
++        "StarCitizen_Launcher.exe",
++        NULL
++    };
+ 
+     setlocale( LC_ALL, "" );
+     if (!unix_to_win_locale( setlocale( LC_CTYPE, NULL ), system_locale )) system_locale[0] = 0;
+@@ -887,6 +891,13 @@ static void init_locale(void)
+     }
+     if (!system_lcid) system_lcid = MAKELANGID( LANG_ENGLISH, SUBLANG_DEFAULT );
+     if (!user_lcid) user_lcid = system_lcid;
++    if (user_lcid != MAKELANGID( LANG_ENGLISH, SUBLANG_DEFAULT ) && main_argc > 1)
++        for (char **pp = eac_launchers; *pp; pp++)
++            if (strstr(main_argv[1], *pp))
++            {
++                user_lcid = MAKELANGID( LANG_ENGLISH, SUBLANG_DEFAULT );
++                break;
++            }
+     user_ui_language = user_lcid;
+ 
+     setlocale( LC_NUMERIC, "C" );  /* FIXME: oleaut32 depends on this */
