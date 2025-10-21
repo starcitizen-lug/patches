@@ -1,0 +1,211 @@
+From 8823d97b9af261d5c9d71d6d580b63a5c88f0e79 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?R=C3=A9mi=20Bernon?= <rbernon@codeweavers.com>
+Date: Thu, 16 Oct 2025 09:47:41 +0200
+Subject: [PATCH] win32u: Set the process idle event from the client side.
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=58749
+---
+ dlls/win32u/message.c        | 21 +++++++++++++++++----
+ dlls/win32u/ntuser_private.h |  1 +
+ dlls/win32u/sysparams.c      |  1 +
+ server/protocol.def          |  1 +
+ server/queue.c               | 19 ++++---------------
+ server/thread.c              |  4 +---
+ server/user.h                |  1 -
+ 7 files changed, 25 insertions(+), 23 deletions(-)
+
+diff --git a/dlls/win32u/message.c b/dlls/win32u/message.c
+index e8bbe229141..a91be75a7dc 100644
+--- a/dlls/win32u/message.c
++++ b/dlls/win32u/message.c
+@@ -2851,6 +2851,7 @@ static int peek_message( MSG *msg, const struct peek_message_filter *filter )
+     UINT first = filter->first, last = filter->last, flags = filter->flags;
+     struct user_thread_info *thread_info = get_user_thread_info();
+     INPUT_MESSAGE_SOURCE prev_source = thread_info->client_info.msg_source;
++    HANDLE idle_event = thread_info->idle_event;
+     struct received_message_info info;
+     unsigned int hw_id = 0;  /* id of previous hardware message */
+     unsigned char buffer_init[1024];
+@@ -2918,7 +2919,11 @@ static int peek_message( MSG *msg, const struct peek_message_filter *filter )
+         if (res)
+         {
+             if (buffer != buffer_init) free( buffer );
+-            if (res == STATUS_PENDING) return 0;
++            if (res == STATUS_PENDING)
++            {
++                if (hwnd == (HWND)-1 && idle_event) NtSetEvent( idle_event, NULL );
++                return 0;
++            }
+             if (res != STATUS_BUFFER_OVERFLOW)
+             {
+                 RtlSetLastWin32Error( RtlNtStatusToDosError(res) );
+@@ -3116,6 +3121,10 @@ static int peek_message( MSG *msg, const struct peek_message_filter *filter )
+                     info.msg.lParam = result->lparam;
+                 }
+             }
++            if (info.msg.message == WM_TIMER || info.msg.message == WM_SYSTIMER)
++            {
++                if (!(flags & PM_NOYIELD) && idle_event) NtSetEvent( idle_event, NULL );
++            }
+             *msg = info.msg;
+             msg->pt = point_phys_to_win_dpi( info.msg.hwnd, info.msg.pt );
+             thread_info->client_info.message_pos   = MAKELONG( msg->pt.x, msg->pt.y );
+@@ -3171,11 +3180,11 @@ static HANDLE get_server_queue_handle(void)
+         SERVER_START_REQ( get_msg_queue_handle )
+         {
+             wine_server_call( req );
+-            ret = wine_server_ptr_handle( reply->handle );
++            thread_info->server_queue = wine_server_ptr_handle( reply->handle );
++            thread_info->idle_event = wine_server_ptr_handle( reply->idle_event );
+         }
+         SERVER_END_REQ;
+-        thread_info->server_queue = ret;
+-        if (!ret) ERR( "Cannot get server thread queue\n" );
++        if (!(ret = thread_info->server_queue)) ERR( "Cannot get server thread queue\n" );
+     }
+     return ret;
+ }
+@@ -3294,6 +3303,7 @@ static DWORD wait_message( DWORD count, const HANDLE *handles, DWORD timeout, DW
+     LARGE_INTEGER time, now, *abs;
+     void *ret_ptr;
+     ULONG ret_len;
++    HANDLE event;
+     DWORD ret;
+ 
+     if ((abs = get_nt_timeout( &time, timeout )))
+@@ -3310,8 +3320,11 @@ static DWORD wait_message( DWORD count, const HANDLE *handles, DWORD timeout, DW
+     }
+ 
+     process_driver_events( QS_ALLINPUT, wake_mask, changed_mask );
++    if (!(changed_mask & QS_SMRESULT) && (event = get_user_thread_info()->idle_event)) NtSetEvent( event, NULL );
++
+     do ret = NtWaitForMultipleObjects( count, handles, !(flags & MWMO_WAITALL), !!(flags & MWMO_ALERTABLE), abs );
+     while (ret == count - 1 && !process_driver_events( QS_ALLINPUT, wake_mask, changed_mask ));
++
+     if (HIWORD(ret)) /* is it an error code? */
+     {
+         RtlSetLastWin32Error( RtlNtStatusToDosError(ret) );
+diff --git a/dlls/win32u/ntuser_private.h b/dlls/win32u/ntuser_private.h
+index a89f5b67b16..1d0131e5886 100644
+--- a/dlls/win32u/ntuser_private.h
++++ b/dlls/win32u/ntuser_private.h
+@@ -112,6 +112,7 @@ struct user_thread_info
+ {
+     struct ntuser_thread_info     client_info;            /* Data shared with client */
+     HANDLE                        server_queue;           /* Handle to server-side queue */
++    HANDLE                        idle_event;             /* Handle to the process idle event */
+     LONGLONG                      last_driver_time;       /* Get/PeekMessage driver event time */
+     WORD                          hook_call_depth;        /* Number of recursively called hook procs */
+     WORD                          hook_unicode;           /* Is current hook unicode? */
+diff --git a/dlls/win32u/sysparams.c b/dlls/win32u/sysparams.c
+index d6ee5d643e2..93009f6e1e0 100644
+--- a/dlls/win32u/sysparams.c
++++ b/dlls/win32u/sysparams.c
+@@ -7065,6 +7065,7 @@ static void thread_detach(void)
+ 
+     cleanup_imm_thread();
+     NtClose( thread_info->server_queue );
++    if (thread_info->idle_event) NtClose( thread_info->idle_event );
+     free( thread_info->session_data );
+     free( thread_info->mouse_tracking_info );
+ 
+diff --git a/server/protocol.def b/server/protocol.def
+index 5a102060160..cb46a5ff2dc 100644
+--- a/server/protocol.def
++++ b/server/protocol.def
+@@ -2291,6 +2291,7 @@ struct process_info
+ @REQ(get_msg_queue_handle)
+ @REPLY
+     obj_handle_t handle;       /* handle to the queue */
++    obj_handle_t idle_event;   /* handle to the process idle event */
+ @END
+ 
+ 
+diff --git a/server/queue.c b/server/queue.c
+index b46f20f1340..82d5a395957 100644
+--- a/server/queue.c
++++ b/server/queue.c
+@@ -1415,16 +1415,6 @@ static int check_queue_input_window( struct msg_queue *queue, user_handle_t wind
+     return ret;
+ }
+ 
+-/* check if the thread queue is idle and set the process idle event if so */
+-void check_thread_queue_idle( struct thread *thread )
+-{
+-    struct msg_queue *queue = thread->queue;
+-    queue_shm_t *queue_shm = queue->shared;
+-
+-    if ((queue_shm->wake_mask & QS_SMRESULT)) return;
+-    if (thread->process->idle_event) set_event( thread->process->idle_event );
+-}
+-
+ /* make sure the specified thread has a queue */
+ int init_thread_queue( struct thread *thread )
+ {
+@@ -3051,9 +3041,12 @@ DECL_HANDLER(is_window_hung)
+ DECL_HANDLER(get_msg_queue_handle)
+ {
+     struct msg_queue *queue = get_current_queue();
++    struct process *process = current->process;
++    struct event *event;
+ 
+     reply->handle = 0;
+-    if (queue) reply->handle = alloc_handle( current->process, queue, SYNCHRONIZE, 0 );
++    if (queue) reply->handle = alloc_handle( process, queue, SYNCHRONIZE, 0 );
++    if ((event = process->idle_event)) reply->idle_event = alloc_handle( process, event, GENERIC_ALL, 0 );
+ }
+ 
+ 
+@@ -3388,13 +3381,9 @@ DECL_HANDLER(get_message)
+         reply->wparam = timer->id;
+         reply->lparam = timer->lparam;
+         get_message_defaults( queue, &reply->x, &reply->y, &reply->time );
+-        if (!(req->flags & PM_NOYIELD) && current->process->idle_event)
+-            set_event( current->process->idle_event );
+         return;
+     }
+ 
+-    if (get_win == -1 && current->process->idle_event) set_event( current->process->idle_event );
+-
+     SHARED_WRITE_BEGIN( queue_shm, queue_shm_t )
+     {
+         shared->wake_mask = req->wake_mask;
+diff --git a/server/thread.c b/server/thread.c
+index 385b71b1c18..6a1b1f8c559 100644
+--- a/server/thread.c
++++ b/server/thread.c
+@@ -1105,7 +1105,7 @@ static int wait_on( const union select_op *select_op, unsigned int count, struct
+ {
+     struct thread_wait *wait;
+     struct wait_queue_entry *entry;
+-    unsigned int i, idle = 0;
++    unsigned int i;
+ 
+     if (!(wait = mem_alloc( FIELD_OFFSET(struct thread_wait, queues[count]) ))) return 0;
+     wait->next    = current->wait;
+@@ -1131,10 +1131,8 @@ static int wait_on( const union select_op *select_op, unsigned int count, struct
+         }
+ 
+         entry->obj = grab_object( obj );
+-        if (obj == (struct object *)current->queue) idle = 1;
+     }
+ 
+-    if (idle) check_thread_queue_idle( current );
+     return current->wait ? 1 : 0;
+ }
+ 
+diff --git a/server/user.h b/server/user.h
+index 73b10aaf5ac..79ec7ba7682 100644
+--- a/server/user.h
++++ b/server/user.h
+@@ -119,7 +119,6 @@ extern void add_queue_hook_count( struct thread *thread, unsigned int index, int
+ extern void inc_queue_paint_count( struct thread *thread, int incr );
+ extern void queue_cleanup_window( struct thread *thread, user_handle_t win );
+ extern int init_thread_queue( struct thread *thread );
+-extern void check_thread_queue_idle( struct thread *thread );
+ extern int attach_thread_input( struct thread *thread_from, struct thread *thread_to );
+ extern void detach_thread_input( struct thread *thread_from );
+ extern void set_clip_rectangle( struct desktop *desktop, const struct rectangle *rect,
+-- 
+GitLab
+
