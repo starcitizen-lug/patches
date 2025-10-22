@@ -1,0 +1,43 @@
+From 665593126870c8cbfed7fa746bda26f9e757df4f Mon Sep 17 00:00:00 2001
+From: mactan-sc <77816662+mactan-sc@users.noreply.github.com>
+Date: Tue, 21 Oct 2025 20:24:23 -0500
+Subject: [PATCH] revert 7abf4432a7dfdc044f0458f2457829038dc497f0
+
+---
+ dlls/winex11.drv/opengl.c      | 5 +++--
+ dlls/winex11.drv/x11drv_main.c | 2 +-
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/winex11.drv/opengl.c b/dlls/winex11.drv/opengl.c
+index c4cc2b1fe1f..6f905d8fefc 100644
+--- a/dlls/winex11.drv/opengl.c
++++ b/dlls/winex11.drv/opengl.c
+@@ -555,9 +555,10 @@ UINT X11DRV_OpenGLInit( UINT version, const struct opengl_funcs *opengl_funcs, c
+     }
+     funcs = opengl_funcs;
+ 
+-    if (use_egl && opengl_funcs->egl_handle)
++    if (use_egl)
+     {
+-        TRACE( "Using EGL OpenGL backend\n" );
++        if (!opengl_funcs->egl_handle) return STATUS_NOT_SUPPORTED;
++        WARN( "Using experimental EGL OpenGL backend\n" );
+         x11drv_driver_funcs = **driver_funcs;
+         x11drv_driver_funcs.p_init_egl_platform = x11drv_init_egl_platform;
+         x11drv_driver_funcs.p_surface_create = x11drv_egl_surface_create;
+diff --git a/dlls/winex11.drv/x11drv_main.c b/dlls/winex11.drv/x11drv_main.c
+index e078a66fbb0..715a2444667 100644
+--- a/dlls/winex11.drv/x11drv_main.c
++++ b/dlls/winex11.drv/x11drv_main.c
+@@ -68,7 +68,7 @@ Window root_window;
+ BOOL usexvidmode = TRUE;
+ BOOL usexrandr = TRUE;
+ BOOL usexcomposite = TRUE;
+-BOOL use_egl = TRUE;
++BOOL use_egl = FALSE;
+ BOOL use_take_focus = TRUE;
+ BOOL use_primary_selection = FALSE;
+ BOOL use_system_cursors = TRUE;
+-- 
+2.51.1
+
