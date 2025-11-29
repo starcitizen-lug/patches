@@ -1,0 +1,22 @@
+Fixes RSI Launcher blowing up when trying to patch a a game install outside C:.
+diff --git a/dlls/ntdll/unix/file.c b/dlls/ntdll/unix/file.c
+index a189472..070bbb8 100644
+--- a/dlls/ntdll/unix/file.c
++++ b/dlls/ntdll/unix/file.c
+@@ -3256,7 +3256,16 @@ static NTSTATUS get_dos_device( char **unix_name, int start_pos )
+     {
+         if (!stat( *unix_name, &st ))
+         {
++            static int unopenable_device_is_bad = -1;
+             TRACE( "-> %s\n", debugstr_a(*unix_name));
++            /* HACK: if user can not open this file, maybe pretend it's a bad device type */
++            if (unopenable_device_is_bad == -1)
++            {
++                char *env = getenv("WINE_UNOPENABLE_DEVICE_IS_BAD");
++                unopenable_device_is_bad = env ? atoi(env) : 0;
++            }
++            if (unopenable_device_is_bad != 0 && access(*unix_name, R_OK))
++                return STATUS_BAD_DEVICE_TYPE;
+             return STATUS_SUCCESS;
+         }
+         if (!dev) break;
