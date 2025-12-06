@@ -1,0 +1,53 @@
+diff --git a/libs/vkd3d/resource.c b/libs/vkd3d/resource.c
+index c5e43c3b..6cc6c9a6 100644
+--- a/libs/vkd3d/resource.c
++++ b/libs/vkd3d/resource.c
+@@ -4044,6 +4044,11 @@ HRESULT d3d12_resource_create_committed(struct d3d12_device *device, const D3D12
+     struct d3d12_resource *object;
+     HRESULT hr;
+ 
++    if (desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)
++    {
++        heap_flags |= D3D12_HEAP_FLAG_SHARED;
++    }
++
+     if (FAILED(hr = d3d12_resource_create(device, VKD3D_RESOURCE_COMMITTED | VKD3D_RESOURCE_ALLOCATION,
+             desc, heap_properties, heap_flags, initial_state, optimized_clear_value,
+             num_castable_formats, castable_formats,
+diff --git a/libs/vkd3d/swapchain.c b/libs/vkd3d/swapchain.c
+index 4e1fa04c..c4eca3fb 100644
+--- a/libs/vkd3d/swapchain.c
++++ b/libs/vkd3d/swapchain.c
+@@ -2065,15 +2065,10 @@ static void dxgi_vk_swap_chain_record_render_pass(struct dxgi_vk_swap_chain *cha
+     VkRenderingInfo rendering_info;
+     VkDependencyInfo dep_info;
+     VkViewport viewport;
+-    bool blank_present;
+ 
+     /* If application intends to present before we have rendered to it,
+      * it is valid, but we need to ignore the blit, just clear backbuffer. */
+     resource = chain->user.backbuffers[chain->request.user_index];
+-    blank_present = vkd3d_atomic_uint32_load_explicit(&resource->initial_layout_transition, vkd3d_memory_order_relaxed) != 0;
+-
+-    if (blank_present)
+-        WARN("Application is presenting user index %u, but it has never been rendered to.\n", chain->request.user_index);
+ 
+     memset(&attachment_info, 0, sizeof(attachment_info));
+     attachment_info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+@@ -2082,7 +2077,7 @@ static void dxgi_vk_swap_chain_record_render_pass(struct dxgi_vk_swap_chain *cha
+     attachment_info.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+     attachment_info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+ 
+-    if (chain->desc.Scaling == DXGI_SCALING_NONE || blank_present)
++    if (chain->desc.Scaling == DXGI_SCALING_NONE)
+         attachment_info.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+ 
+     memset(&rendering_info, 0, sizeof(rendering_info));
+@@ -2145,7 +2140,6 @@ static void dxgi_vk_swap_chain_record_render_pass(struct dxgi_vk_swap_chain *cha
+     VK_CALL(vkCmdPipelineBarrier2(vk_cmd, &dep_info));
+     VK_CALL(vkCmdBeginRendering(vk_cmd, &rendering_info));
+ 
+-    if (!blank_present)
+     {
+         VK_CALL(vkCmdSetViewport(vk_cmd, 0, 1, &viewport));
+         VK_CALL(vkCmdSetScissor(vk_cmd, 0, 1, &rendering_info.renderArea));
