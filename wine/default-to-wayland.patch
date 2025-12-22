@@ -1,0 +1,19 @@
+From 4e86deea7c7e10e3090f40ba7e3a14b94542830a Mon Sep 17 00:00:00 2001
+From: mactan-sc <77816662+mactan-sc@users.noreply.github.com>
+Date: Sun, 21 Dec 2025 20:25:04 -0600
+Subject: [PATCH] default-to-wayland
+
+---
+ programs/explorer/desktop.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/programs/explorer/desktop.c b/programs/explorer/desktop.c
+index ce70c5dd79d..5a97c004f98 100644
+--- a/programs/explorer/desktop.c
++++ b/programs/explorer/desktop.c
+@@ -43 +43 @@ WINE_DEFAULT_DEBUG_CHANNEL(explorer);
+-static const WCHAR default_driver[] = L"mac,x11,wayland";
++static const WCHAR default_driver[] = L"mac,wayland,x11";
+-- 
+2.52.0
+
