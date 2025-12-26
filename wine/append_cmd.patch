@@ -33,7 +33,7 @@ index 7fae94f3b52..2771812e021 100644
 +    }
 +    options[] =
 +    {
-+        {RTL_CONSTANT_STRING(L"RSI Launcher.exe"), TRUE, L" --in-process-gpu --no-deprecation --log-level=3", L" --in-process-gpu --disable-gpu --no-deprecation --log-level=3"},
++        {RTL_CONSTANT_STRING(L"RSI Launcher.exe"), TRUE, L" --in-process-gpu --no-deprecation", L" --in-process-gpu --disable-gpu --no-deprecation"},
 +        {RTL_CONSTANT_STRING(L"StarCitizen.exe"), FALSE, NULL, L" +pl_pit.forceSoftwareCursor=1"}
 +    };
 +
