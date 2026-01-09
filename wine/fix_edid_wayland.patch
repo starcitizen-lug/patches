@@ -1,0 +1,131 @@
+diff --git a/dlls/winewayland.drv/display.c b/dlls/winewayland.drv/display.c
+index b2a94289abb..b2a77f6ddc5 100644
+--- a/dlls/winewayland.drv/display.c
++++ b/dlls/winewayland.drv/display.c
+@@ -217,6 +217,9 @@ static void wayland_add_device_monitor(const struct gdi_device_manager *device_m
+     /* We don't have a direct way to get the work area in Wayland. */
+     monitor.rc_work = monitor.rc_monitor;
+ 
++    monitor.edid = output_info->output->edid;
++    monitor.edid_len = output_info->output->edid_len;
++
+     TRACE("name=%s rc_monitor=rc_work=%s\n",
+           output_info->output->name, wine_dbgstr_rect(&monitor.rc_monitor));
+ 
+diff --git a/dlls/winewayland.drv/wayland_output.c b/dlls/winewayland.drv/wayland_output.c
+index f76881a1770..719dab37b0a 100644
+--- a/dlls/winewayland.drv/wayland_output.c
++++ b/dlls/winewayland.drv/wayland_output.c
+@@ -28,7 +28,10 @@
+ 
+ #include "wine/debug.h"
+ 
++#include <dirent.h>
++#include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
+ 
+@@ -151,8 +154,13 @@ static void wayland_output_done(struct wayland_output *output)
+     if (output->pending_flags & WAYLAND_OUTPUT_CHANGED_NAME)
+     {
+         free(output->current.name);
++        free(output->current.edid);
+         output->current.name = output->pending.name;
++        output->current.edid = output->pending.edid;
++        output->current.edid_len = output->pending.edid_len;
+         output->pending.name = NULL;
++        output->pending.edid = NULL;
++        output->pending.edid_len = 0;
+     }
+ 
+     if (output->pending_flags & WAYLAND_OUTPUT_CHANGED_LOGICAL_XY)
+@@ -193,6 +201,56 @@ static void wayland_output_done(struct wayland_output *output)
+     maybe_init_display_devices();
+ }
+ 
++static void wayland_output_read_edid(struct wayland_output_state *output)
++{
++    char path[512];
++    DIR *dir;
++    struct dirent *entry;
++    unsigned char buffer[1024];
++    size_t bytes_read;
++
++    if (!output->name) return;
++
++    dir = opendir("/sys/class/drm");
++    if (!dir)
++    {
++        ERR("Read EDID: Failed to open /sys/class/drm\n");
++        return;
++    }
++
++    while ((entry = readdir(dir)))
++    {
++        char *dash = strchr(entry->d_name, '-');
++        if (!dash) continue;
++
++        if (strcmp(dash + 1, output->name) == 0)
++        {
++            snprintf(path, sizeof(path), "/sys/class/drm/%s/edid", entry->d_name);
++            FILE *f = fopen(path, "rb");
++            if (f)
++            {
++                bytes_read = fread(buffer, 1, sizeof(buffer), f);
++                if (bytes_read > 0)
++                {
++                    output->edid = malloc(bytes_read);
++                    if (output->edid) {
++                        memcpy(output->edid, buffer, bytes_read);
++                        output->edid_len = bytes_read;
++                        TRACE("Read EDID: Loaded %s (%zu bytes)\n", output->name, bytes_read);
++                    }
++                } else {
++                    WARN("Read EDID: No bytes read for %s\n", output->name);
++                }
++                break;
++            }
++            else {
++                ERR("Read EDID: Failed to open %s\n", path);
++            }
++        }
++    }
++    closedir(dir);
++}
++
+ static void output_handle_geometry(void *data, struct wl_output *wl_output,
+                                    int32_t x, int32_t y,
+                                    int32_t physical_width, int32_t physical_height,
+@@ -281,7 +339,9 @@ static void zxdg_output_v1_handle_name(void *data,
+     struct wayland_output *output = data;
+ 
+     free(output->pending.name);
++    free(output->pending.edid);
+     output->pending.name = strdup(name);
++    wayland_output_read_edid(&output->pending);
+     output->pending_flags |= WAYLAND_OUTPUT_CHANGED_NAME;
+ }
+ 
+@@ -358,6 +418,7 @@ static void wayland_output_state_deinit(struct wayland_output_state *state)
+ {
+     rb_destroy(&state->modes, wayland_output_mode_free_rb, NULL);
+     free(state->name);
++    free(state->edid);
+ }
+ 
+ /**********************************************************************
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index 7ab1f58ba64..13812e44413 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -205,6 +205,8 @@ struct wayland_output_state
+     char *name;
+     int logical_x, logical_y;
+     int logical_w, logical_h;
++    void *edid;
++    size_t edid_len;
+ };
+ 
+ struct wayland_output
