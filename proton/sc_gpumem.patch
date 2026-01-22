@@ -1,0 +1,168 @@
+From 93d7924f62c6a8600cb85cba2f9eecf127babb98 Mon Sep 17 00:00:00 2001
+From: Jack Greiner <jack@emoss.org>
+Date: Wed, 21 Jan 2026 15:49:37 -0500
+Subject: [PATCH] win32u: Minimal D3DKMT query implementation for Star Citizen.
+
+Implement a minimal version of NtGdiDdDDIQueryAdapterInfo (NODEMETADATA)
+and NtGdiDdDDIQueryStatistics to return GPU memory statistics.
+
+This is required for Star Citizen's performance monitoring and potentially other features to function correctly.
+
+Includes a short-lived cache to minimize overhead on repetitive queries.
+---
+ dlls/win32u/d3dkmt.c | 126 +++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 126 insertions(+)
+
+diff --git a/dlls/win32u/d3dkmt.c b/dlls/win32u/d3dkmt.c
+index 74dbce9539f..d037b04891d 100644
+--- a/dlls/win32u/d3dkmt.c
++++ b/dlls/win32u/d3dkmt.c
+@@ -365,6 +365,20 @@ NTSTATUS WINAPI NtGdiDdDDIQueryAdapterInfo( D3DKMT_QUERYADAPTERINFO *desc )
+ 
+             status = STATUS_SUCCESS;
+         }
++        else if (desc->Type == KMTQAITYPE_NODEMETADATA)
++        {
++            UINT *node = desc->pPrivateDriverData;
++
++            if (desc->PrivateDriverDataSize < sizeof(*node) * 2)
++                status = STATUS_INVALID_PARAMETER;
++            else
++            {
++                memset( node, 0, desc->PrivateDriverDataSize );
++                /* NodeData.EngineType = DXGK_ENGINE_TYPE_3D */
++                node[1] = 1;
++                status = STATUS_SUCCESS;
++            }
++        }
+         else
+         {
+             FIXME("desc %p, type %d stub\n", desc, desc->Type);
+@@ -374,12 +388,124 @@ NTSTATUS WINAPI NtGdiDdDDIQueryAdapterInfo( D3DKMT_QUERYADAPTERINFO *desc )
+     return status;
+ }
+ 
++static __thread struct {
++    LUID AdapterLuid;
++    DWORD time;
++    ULONGLONG total[2];
++    ULONGLONG budget[2];
++    ULONGLONG usage[2];
++} g_GPUMemCache = {0};
++
++static inline ULONGLONG GPUMem( LUID AdapterLuid, ULONGLONG *budget, ULONGLONG *usage, BOOL shared )
++{
++    DWORD now = NtGetTickCount();
++    BOOL use_cache = FALSE;
++    int idx_target = shared ? 1 : 0;
++
++    if (g_GPUMemCache.AdapterLuid.LowPart == AdapterLuid.LowPart && g_GPUMemCache.AdapterLuid.HighPart == AdapterLuid.HighPart)
++        if (now - g_GPUMemCache.time < 123)
++            use_cache = TRUE;
++
++    if (!use_cache)
++    {
++        D3DKMT_OPENADAPTERFROMLUID adp = { .AdapterLuid = AdapterLuid };
++        struct d3dkmt_adapter *adapter;
++
++        g_GPUMemCache.AdapterLuid = AdapterLuid;
++        g_GPUMemCache.time = now;
++        g_GPUMemCache.total[0] = g_GPUMemCache.total[1] = 0;
++        g_GPUMemCache.budget[0] = g_GPUMemCache.budget[1] = 0;
++        g_GPUMemCache.usage[0] = g_GPUMemCache.usage[1] = 0;
++
++        if (NtGdiDdDDIOpenAdapterFromLuid( &adp ) == STATUS_SUCCESS)
++        {
++            pthread_mutex_lock( &d3dkmt_lock );
++            if ((adapter = find_adapter_from_handle( adp.hAdapter )) && adapter->vk_device)
++            {
++                VkPhysicalDeviceMemoryBudgetPropertiesEXT mem_budget = {0};
++                VkPhysicalDeviceMemoryProperties2 properties2 = {0};
++
++                mem_budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
++                properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
++                properties2.pNext = &mem_budget;
++
++                pvkGetPhysicalDeviceMemoryProperties2KHR( adapter->vk_device, &properties2 );
++                for (UINT i = 0; i < properties2.memoryProperties.memoryHeapCount; ++i)
++                {
++                    int idx = (properties2.memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) ? 0 : 1;
++                    ULONGLONG s = properties2.memoryProperties.memoryHeaps[i].size;
++                    ULONGLONG b = min( s, mem_budget.heapBudget[i] );
++                    ULONGLONG u = min( b, mem_budget.heapUsage[i] );
++                    g_GPUMemCache.total[idx] += s;
++                    g_GPUMemCache.budget[idx] += b;
++                    g_GPUMemCache.usage[idx] += u;
++                }
++            }
++            pthread_mutex_unlock( &d3dkmt_lock );
++            NtGdiDdDDICloseAdapter( &(D3DKMT_CLOSEADAPTER){ .hAdapter = adp.hAdapter } );
++        }
++    }
++
++    if (budget) *budget = g_GPUMemCache.budget[idx_target];
++    if (usage) *usage = g_GPUMemCache.usage[idx_target];
++    return g_GPUMemCache.total[idx_target];
++}
++
+ /******************************************************************************
+  *           NtGdiDdDDIQueryStatistics    (win32u.@)
+  */
+ NTSTATUS WINAPI NtGdiDdDDIQueryStatistics( D3DKMT_QUERYSTATISTICS *stats )
+ {
+     FIXME( "(%p): stub\n", stats );
++
++    switch ((int)stats->Type)
++    {
++    case D3DKMT_QUERYSTATISTICS_ADAPTER:
++    {
++        D3DKMT_OPENADAPTERFROMLUID adp = { .AdapterLuid = stats->AdapterLuid };
++        memset( &stats->QueryResult, 0, sizeof(stats->QueryResult) );
++        if (NtGdiDdDDIOpenAdapterFromLuid( &adp ) == STATUS_SUCCESS)
++        {
++            stats->QueryResult.AdapterInformation.NbSegments = 2;
++            stats->QueryResult.AdapterInformation.NodeCount = 1;
++            g_GPUMemCache.AdapterLuid.LowPart = g_GPUMemCache.AdapterLuid.HighPart = 0;
++            NtGdiDdDDICloseAdapter( &(D3DKMT_CLOSEADAPTER){ .hAdapter = adp.hAdapter } );
++        }
++        break;
++    }
++    case D3DKMT_QUERYSTATISTICS_SEGMENT:
++    case D3DKMT_QUERYSTATISTICS_PROCESS_SEGMENT:
++    case 0x09 /* D3DKMT_QUERYSTATISTICS_PROCESS_SEGMENT_GROUP */:
++    {
++        ULONGLONG total, budget, usage;
++        ULONG aperture = !!stats->QueryProcessSegment.SegmentId;
++
++        memset( &stats->QueryResult, 0, sizeof(stats->QueryResult) );
++        if (stats->QuerySegment.SegmentId > 1) break;
++        if (stats->Type >= D3DKMT_QUERYSTATISTICS_PROCESS_SEGMENT)
++            if (stats->hProcess && stats->hProcess != GetCurrentProcess())
++                break;
++
++        if ((total = GPUMem( stats->AdapterLuid, &budget, &usage, aperture )) > 0)
++        {
++            if (stats->Type == D3DKMT_QUERYSTATISTICS_SEGMENT) {
++                stats->QueryResult.SegmentInformation.CommitLimit = total;
++                stats->QueryResult.SegmentInformation.BytesCommitted = total - budget + usage;
++                stats->QueryResult.SegmentInformation.BytesResident = stats->QueryResult.SegmentInformation.BytesCommitted;
++                stats->QueryResult.SegmentInformation.Aperture = aperture;
++            } else if (stats->Type == D3DKMT_QUERYSTATISTICS_PROCESS_SEGMENT) {
++                stats->QueryResult.ProcessSegmentInformation.BytesCommitted = usage;
++            } else {
++                /* ProcessSegmentGroupInformation.Budget */
++                stats->QueryResult.ProcessSegmentInformation.BytesCommitted = budget;
++                /* ProcessSegmentGroupInformation.Usage */
++                stats->QueryResult.ProcessSegmentInformation.MinimumWorkingSet = usage;
++            }
++        }
++        break;
++    }
++    }
++
+     return STATUS_SUCCESS;
+ }
+ 
+-- 
+2.52.0
+
