@@ -1,20 +1,20 @@
-From 643b1bb65d8f4317ccecc56ec118cb47b579d27e Mon Sep 17 00:00:00 2001
-From: Vingian <89702391+Vingian@users.noreply.github.com>
-Date: Sat, 12 Jul 2025 02:28:36 -0300
+From f1c428cbc1cd26c7ed73462b0ddf80bdb275322e Mon Sep 17 00:00:00 2001
+From: Jack Greiner <jack@emoss.org>
+Date: Thu, 22 Jan 2026 11:22:05 -0500
 Subject: [PATCH] Append commands
 
 Inspired by https://github.com/ValveSoftware/wine/commit/d7ba7d8ffd88d1c2f637af90cc13730d1c0c43ea ... append commands to fixes some issues depending on the display system in use.
 ---
- dlls/ntdll/env.c             | 53 ++++++++++++++++++++++++++++++++++--
+ dlls/ntdll/env.c             | 57 ++++++++++++++++++++++++++++++++++--
  programs/explorer/desktop.c  |  3 ++
  programs/wineboot/wineboot.c |  2 ++
- 3 files changed, 55 insertions(+), 3 deletions(-)
+ 3 files changed, 59 insertions(+), 3 deletions(-)
 
 diff --git a/dlls/ntdll/env.c b/dlls/ntdll/env.c
-index 7fae94f3b52..2771812e021 100644
+index dd4f9c244f7..77306a6c88a 100644
 --- a/dlls/ntdll/env.c
 +++ b/dlls/ntdll/env.c
-@@ -672,6 +672,46 @@ void WINAPI RtlDestroyProcessParameters( RTL_USER_PROCESS_PARAMETERS *params )
+@@ -672,6 +672,50 @@ void WINAPI RtlDestroyProcessParameters( RTL_USER_PROCESS_PARAMETERS *params )
      RtlFreeHeap( GetProcessHeap(), 0, params );
  }
  
@@ -23,6 +23,9 @@ index 7fae94f3b52..2771812e021 100644
 +    UNICODE_STRING ret = {0};
 +    RTL_ATOM atom;
 +    BOOL is_wayland = NT_SUCCESS(NtFindAtom( L"WINE_IS_WAYLAND", 15 * sizeof(WCHAR), &atom )) && atom;
++
++    static const WCHAR rsi_args[] = L" --in-process-gpu --no-deprecation";
++    static const WCHAR rsi_args_wayland[] = L" --in-process-gpu --disable-gpu --no-deprecation";
 +
 +    static const struct
 +    {
@@ -33,7 +36,8 @@ index 7fae94f3b52..2771812e021 100644
 +    }
 +    options[] =
 +    {
-+        {RTL_CONSTANT_STRING(L"RSI Launcher.exe"), TRUE, L" --in-process-gpu --no-deprecation", L" --in-process-gpu --disable-gpu --no-deprecation"},
++        {RTL_CONSTANT_STRING(L"RSI Launcher.exe"), TRUE, rsi_args, rsi_args_wayland},
++        {RTL_CONSTANT_STRING(L"RSI RC Launcher.exe"), TRUE, rsi_args, rsi_args_wayland},
 +        {RTL_CONSTANT_STRING(L"StarCitizen.exe"), FALSE, NULL, L" +pl_pit.forceSoftwareCursor=1"}
 +    };
 +
@@ -61,7 +65,7 @@ index 7fae94f3b52..2771812e021 100644
  
  /***********************************************************************
   *           init_user_process_params
-@@ -683,7 +723,7 @@ void init_user_process_params(void)
+@@ -683,7 +727,7 @@ void init_user_process_params(void)
      WCHAR *env;
      SIZE_T size = 0, env_size;
      RTL_USER_PROCESS_PARAMETERS *new_params, *params = NtCurrentTeb()->Peb->ProcessParameters;
@@ -70,7 +74,7 @@ index 7fae94f3b52..2771812e021 100644
  
      /* environment needs to be a separate memory block */
      env_size = params->EnvironmentSize;
-@@ -693,11 +733,15 @@ void init_user_process_params(void)
+@@ -693,11 +737,15 @@ void init_user_process_params(void)
          else env[0] = 0;
      }
  
@@ -88,7 +92,7 @@ index 7fae94f3b52..2771812e021 100644
  
      new_params->Environment     = env;
      new_params->DebugFlags      = params->DebugFlags;
-@@ -729,4 +773,7 @@ void init_user_process_params(void)
+@@ -729,4 +777,7 @@ void init_user_process_params(void)
      }
      set_wow64_environment( &new_params->Environment );
      new_params->EnvironmentSize = RtlSizeHeap( GetProcessHeap(), 0, new_params->Environment );
@@ -97,7 +101,7 @@ index 7fae94f3b52..2771812e021 100644
 +    RtlFreeUnicodeString( &x );
  }
 diff --git a/programs/explorer/desktop.c b/programs/explorer/desktop.c
-index e0b57a4b37f..0acba14097f 100644
+index ce70c5dd79d..84c0814ec08 100644
 --- a/programs/explorer/desktop.c
 +++ b/programs/explorer/desktop.c
 @@ -1052,6 +1052,9 @@ static void load_graphics_driver( const WCHAR *driver, GUID *guid )
@@ -111,10 +115,10 @@ index e0b57a4b37f..0acba14097f 100644
                guid->Data4[0], guid->Data4[1], guid->Data4[2], guid->Data4[3],
                guid->Data4[4], guid->Data4[5], guid->Data4[6], guid->Data4[7] );
 diff --git a/programs/wineboot/wineboot.c b/programs/wineboot/wineboot.c
-index 1b04fd3b202..3b975faae5d 100644
+index 8359e5d4c44..465657ade75 100644
 --- a/programs/wineboot/wineboot.c
 +++ b/programs/wineboot/wineboot.c
-@@ -1660,6 +1660,8 @@ static void update_wineprefix( BOOL force )
+@@ -1629,6 +1629,8 @@ static void update_wineprefix( BOOL force )
      int fd;
      struct stat st;
  
@@ -123,3 +127,6 @@ index 1b04fd3b202..3b975faae5d 100644
      if (!inf_path)
      {
          WINE_MESSAGE( "wine: failed to update %s, wine.inf not found\n", debugstr_w( config_dir ));
+-- 
+2.52.0
+
