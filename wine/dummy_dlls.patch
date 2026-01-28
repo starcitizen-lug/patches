@@ -1,20 +1,24 @@
-From eb6c207ce5910123ded4aacb0f52d6804cb68251 Mon Sep 17 00:00:00 2001
-From: mactan-sc <77816662+mactan-sc@users.noreply.github.com>
-Date: Tue, 27 Jan 2026 17:26:08 -0600
+From 56c50cbb5682c02fe0a601d3593d6dd7619144ac Mon Sep 17 00:00:00 2001
+From: Vingian <89702391+Vingian@users.noreply.github.com>
+Date: Tue, 27 Jan 2026 21:26:12 -0300
 Subject: [PATCH] Dummy dlls to satisfy some checks
 
+Creates the dummy dlls needed to satisfy some checks.
 ---
  loader/wine.inf.in | 3 +++
  1 file changed, 3 insertions(+)
 
 diff --git a/loader/wine.inf.in b/loader/wine.inf.in
-index 5bdb6455a06..557096045af 100644
+index 80a4a062351..2b6f1718c51 100644
 --- a/loader/wine.inf.in
 +++ b/loader/wine.inf.in
-@@ -831,0 +832,3 @@ HKLM,SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x86,"Version",2,"14.42.344
+@@ -843,6 +843,9 @@ HKLM,SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x86,"Version",2,"14.42.344
+ 11,wbem,wmic.exe
+ 11,wbem,wmiutils.dll
+ 11,WindowsPowerShell\v1.0,powershell.exe
 +; dummy dlls
 +11,,devobj.dll,security.dll
 +11,,drvstore.dll,security.dll
--- 
-2.52.0
-
+ ; empty folders to make sure the parent dirs are not removed
+ 16410,Microsoft,
+ 16412,Microsoft,
