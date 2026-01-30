@@ -415,19 +415,19 @@ index 792f1d955e2..78dd0177fac 100755
  
              body += "        default:\n"
              if self.direction == Direction.INPUT:
--                body += ident + "FIXME(\"Unhandled sType %u.\\n\", in_header->sType);\n"
-+                body += ident + "if ((in_header->sType >> 16) == 0x7ead)\n"
-+                body += ident + "{\n"
-+                body += ident + "    VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);\n";
-+                body += ident + "    memcpy(out_ext, in_header, 32);\n";
-+                body += ident + "    out_ext->pNext = NULL;\n";
-+                body += ident + "    out_header->pNext = (void *)out_ext;\n";
-+                body += ident + "    out_header = (void *)out_ext;\n";
-+                body += ident + "}\n"
-+                body += ident + "else\n"
-+                body += ident + "{\n"
-+                body += ident + "    FIXME(\"Unhandled sType %u.\\n\", in_header->sType);\n"
-+                body += ident + "}\n"
+-                body += ident + f"FIXME(\"Unhandled {self.operand.chain_type.name} %u.\\n\", in_header->{self.operand.chain_type.name});\n"
++                body += ident + f"if ((in_header->{self.operand.chain_type.name} >> 16) == 0x7ead)\n"
++                body += ident +  "{\n"
++                body += ident +  "    VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);\n";
++                body += ident +  "    memcpy(out_ext, in_header, 32);\n";
++                body += ident + f"    out_ext->{self.operand.chain_next.name} = NULL;\n";
++                body += ident + f"    out_header->{self.operand.chain_next.name} = (void *)out_ext;\n";
++                body += ident +  "    out_header = (void *)out_ext;\n";
++                body += ident +  "}\n"
++                body += ident +  "else\n"
++                body += ident +  "{\n"
++                body += ident + f"    FIXME(\"Unhandled {self.operand.chain_type.name} %u.\\n\", in_header->{self.operand.chain_type.name});\n"
++                body += ident +  "}\n"
              body += "            break;\n"
              body += "        }\n"
              body += "    }\n"
