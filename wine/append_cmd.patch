@@ -37,8 +37,8 @@ index dd4f9c244f7..77306a6c88a 100644
 +    options[] =
 +    {
 +        {RTL_CONSTANT_STRING(L"RSI Launcher.exe"), TRUE, rsi_args, rsi_args_wayland},
-+        {RTL_CONSTANT_STRING(L"RSI RC Launcher.exe"), TRUE, rsi_args, rsi_args_wayland},
-+        {RTL_CONSTANT_STRING(L"StarCitizen.exe"), FALSE, NULL, L" +pl_pit.forceSoftwareCursor=1"}
++        {RTL_CONSTANT_STRING(L"RSI RC Launcher.exe"), TRUE, rsi_args, rsi_args_wayland}
++
 +    };
 +
 +    for (unsigned int i = 0, x; i < ARRAY_SIZE(options); ++i)
