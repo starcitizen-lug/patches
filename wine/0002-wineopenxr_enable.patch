@@ -31,18 +31,18 @@ https://github.com/ValveSoftware/wine/commit/f258a47db8e32fad8e7782ae55ae526e0e4
  15 files changed, 267 insertions(+), 7 deletions(-)
 
 diff --git a/configure.ac b/configure.ac
-index 1d3165dff84..0332787b8cd 100644
+index 2ffa22e3e1c..851b2230b2b 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -2384,6 +2384,8 @@ esac
- 
- dnl *** Check for modules to disable by default
+@@ -2436,6 +2436,8 @@ enable_cppabi=${enable_cppabi:-no}
+ enable_unwind=${enable_unwind:-$enable_cppabi}
+ enable_vcruntime140_1=${enable_vcruntime140_1:-x86_64,arm64ec}
  
 +test $HOST_ARCH = x86_64 && enable_wineopenxr=${enable_wineopenxr:-x86_64} || enable_wineopenxr=${enable_wineopenxr:-no}
 +
- enable_vcruntime140_1=${enable_vcruntime140_1:-x86_64,arm64ec}
- 
  if test -n "$PE_ARCHS"
+ then
+     enable_wow64=${enable_wow64:-aarch64,x86_64}
 @@ -3364,6 +3366,7 @@ WINE_CONFIG_MAKEFILE(dlls/winegstreamer)
  WINE_CONFIG_MAKEFILE(dlls/winehid.sys)
  WINE_CONFIG_MAKEFILE(dlls/winemac.drv)
