@@ -1,0 +1,14 @@
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index 7e644a6dd9f..8689fba8b91 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -531,7 +531,7 @@ static inline struct amd64_thread_data *amd64_thread_data(void)
+ static unsigned int frame_size;
+ static unsigned int xstate_size = sizeof(XSAVE_AREA_HEADER);
+ static UINT64 xstate_extended_features;
+-static LONG syscall_dispatch_enabled = TRUE;
++static LONG syscall_dispatch_enabled = FALSE;
+ 
+ #if defined(__linux__) || defined(__APPLE__)
+ static inline TEB *get_current_teb(void)
+ 
