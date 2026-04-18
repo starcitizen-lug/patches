@@ -1,27 +1,27 @@
-From bbc33d7ac10ce39ad846cbbf72c1e8d71918991b Mon Sep 17 00:00:00 2001
+From da537814ad5ece485412e64e469be3e7119b7883 Mon Sep 17 00:00:00 2001
 From: mactan-sc <77816662+mactan-sc@users.noreply.github.com>
-Date: Mon, 26 Jan 2026 19:10:44 -0600
+Date: Sat, 18 Apr 2026 18:51:38 -0500
 Subject: [PATCH] wineopenxr
 
 ---
  dlls/wineopenxr/Makefile.in            |   11 +
  dlls/wineopenxr/dxvk-interop.h         |  366 +
  dlls/wineopenxr/loader_structs.h       |   30 +
- dlls/wineopenxr/loader_thunks.c        | 4947 +++++++++++++
- dlls/wineopenxr/loader_thunks.h        | 3517 +++++++++
- dlls/wineopenxr/make_openxr            | 3583 +++++++++
- dlls/wineopenxr/openxr.c               |  409 ++
- dlls/wineopenxr/openxr_loader.c        | 2015 ++++++
+ dlls/wineopenxr/loader_thunks.c        | 4971 +++++++++++++
+ dlls/wineopenxr/loader_thunks.h        | 3535 +++++++++
+ dlls/wineopenxr/make_openxr            | 3581 +++++++++
+ dlls/wineopenxr/openxr.c               |  475 ++
+ dlls/wineopenxr/openxr_loader.c        | 2008 +++++
  dlls/wineopenxr/openxr_loader.h        |  127 +
  dlls/wineopenxr/openxr_private.h       |   60 +
- dlls/wineopenxr/openxr_thunks.c        | 5448 ++++++++++++++
- dlls/wineopenxr/openxr_thunks.h        |  839 +++
+ dlls/wineopenxr/openxr_thunks.c        | 5474 ++++++++++++++
+ dlls/wineopenxr/openxr_thunks.h        |  841 +++
  dlls/wineopenxr/vkd3d-proton-interop.h |  308 +
  dlls/wineopenxr/wineopenxr.h           | 9266 ++++++++++++++++++++++++
  dlls/wineopenxr/wineopenxr.json        |    7 +
  dlls/wineopenxr/wineopenxr.spec        |    5 +
  dlls/wineopenxr/wineopenxr64.json      |    6 +
- 17 files changed, 30944 insertions(+)
+ 17 files changed, 31071 insertions(+)
  create mode 100644 dlls/wineopenxr/Makefile.in
  create mode 100644 dlls/wineopenxr/dxvk-interop.h
  create mode 100644 dlls/wineopenxr/loader_structs.h
@@ -467,10 +467,10 @@ index 00000000000..8a4ba66df1d
 +*/
 diff --git a/dlls/wineopenxr/loader_thunks.c b/dlls/wineopenxr/loader_thunks.c
 new file mode 100644
-index 00000000000..253d84b9ffb
+index 00000000000..f0e1c198bd2
 --- /dev/null
 +++ b/dlls/wineopenxr/loader_thunks.c
-@@ -0,0 +1,4947 @@
+@@ -0,0 +1,4971 @@
 +/* Automatically generated from Vulkan xr.xml; DO NOT EDIT!
 + *
 + * This file is generated from Vulkan xr.xml file covered
@@ -640,6 +640,30 @@ index 00000000000..253d84b9ffb
 +    params.computeInfo = computeInfo;
 +    _status = UNIX_CALL(xrComputeNewSceneMSFT, &params);
 +    assert(!_status && "xrComputeNewSceneMSFT");
++    return params.result;
++}
++
++XrResult WINAPI xrConvertTimeToWin32PerformanceCounterKHR(XrInstance instance, XrTime time, LARGE_INTEGER *performanceCounter)
++{
++    struct xrConvertTimeToWin32PerformanceCounterKHR_params params;
++    NTSTATUS _status;
++    params.instance = instance;
++    params.time = time;
++    params.performanceCounter = performanceCounter;
++    _status = UNIX_CALL(xrConvertTimeToWin32PerformanceCounterKHR, &params);
++    assert(!_status && "xrConvertTimeToWin32PerformanceCounterKHR");
++    return params.result;
++}
++
++XrResult WINAPI xrConvertWin32PerformanceCounterToTimeKHR(XrInstance instance, const LARGE_INTEGER *performanceCounter, XrTime *time)
++{
++    struct xrConvertWin32PerformanceCounterToTimeKHR_params params;
++    NTSTATUS _status;
++    params.instance = instance;
++    params.performanceCounter = performanceCounter;
++    params.time = time;
++    _status = UNIX_CALL(xrConvertWin32PerformanceCounterToTimeKHR, &params);
++    assert(!_status && "xrConvertWin32PerformanceCounterToTimeKHR");
 +    return params.result;
 +}
 +
@@ -5420,10 +5444,10 @@ index 00000000000..253d84b9ffb
 +}
 diff --git a/dlls/wineopenxr/loader_thunks.h b/dlls/wineopenxr/loader_thunks.h
 new file mode 100644
-index 00000000000..52aec91c897
+index 00000000000..1dac24780a1
 --- /dev/null
 +++ b/dlls/wineopenxr/loader_thunks.h
-@@ -0,0 +1,3517 @@
+@@ -0,0 +1,3535 @@
 +/* Automatically generated from Vulkan xr.xml; DO NOT EDIT!
 + *
 + * This file is generated from Vulkan xr.xml file covered
@@ -5467,6 +5491,8 @@ index 00000000000..52aec91c897
 +    unix_xrChangeVirtualKeyboardTextContextMETA,
 +    unix_xrClearSpatialAnchorStoreMSFT,
 +    unix_xrComputeNewSceneMSFT,
++    unix_xrConvertTimeToWin32PerformanceCounterKHR,
++    unix_xrConvertWin32PerformanceCounterToTimeKHR,
 +    unix_xrCreateAction,
 +    unix_xrCreateActionSet,
 +    unix_xrCreateActionSpace,
@@ -5958,6 +5984,22 @@ index 00000000000..52aec91c897
 +{
 +    XrSceneObserverMSFT sceneObserver;
 +    const XrNewSceneComputeInfoMSFT *computeInfo;
++    XrResult result;
++};
++
++struct xrConvertTimeToWin32PerformanceCounterKHR_params
++{
++    XrInstance instance;
++    XrTime time;
++    LARGE_INTEGER *performanceCounter;
++    XrResult result;
++};
++
++struct xrConvertWin32PerformanceCounterToTimeKHR_params
++{
++    XrInstance instance;
++    const LARGE_INTEGER *performanceCounter;
++    XrTime *time;
 +    XrResult result;
 +};
 +
@@ -8943,10 +8985,10 @@ index 00000000000..52aec91c897
 +#endif /* __WINE_OPENXR_LOADER_THUNKS_H */
 diff --git a/dlls/wineopenxr/make_openxr b/dlls/wineopenxr/make_openxr
 new file mode 100755
-index 00000000000..ff0d387dbb1
+index 00000000000..11f96197f92
 --- /dev/null
 +++ b/dlls/wineopenxr/make_openxr
-@@ -0,0 +1,3583 @@
+@@ -0,0 +1,3581 @@
 +#!/usr/bin/env python3
 +# Wine Vulkan generator
 +#
@@ -9097,8 +9139,6 @@ index 00000000000..ff0d387dbb1
 +
 +# loader functions which are entirely manually implemented
 +MANUAL_LOADER_FUNCTIONS = {
-+    "xrConvertTimeToWin32PerformanceCounterKHR",
-+    "xrConvertWin32PerformanceCounterToTimeKHR",
 +    "xrGetD3D11GraphicsRequirementsKHR",
 +    "xrGetD3D12GraphicsRequirementsKHR",
 +    "xrCreateApiLayerInstance",
@@ -12532,22 +12572,25 @@ index 00000000000..ff0d387dbb1
 +    main()
 diff --git a/dlls/wineopenxr/openxr.c b/dlls/wineopenxr/openxr.c
 new file mode 100644
-index 00000000000..a37eceb0516
+index 00000000000..b2240792b23
 --- /dev/null
 +++ b/dlls/wineopenxr/openxr.c
-@@ -0,0 +1,409 @@
+@@ -0,0 +1,475 @@
 +#if 0
 +#pragma makedep unix
 +#endif
 +
 +#define _GNU_SOURCE
 +#include <dlfcn.h>
++#include <time.h>
 +
 +#include "ntstatus.h"
 +#define WIN32_NO_STATUS
 +#include "windef.h"
 +#include "winnt.h"
++#include "winternl.h"
 +#include "wine/server_protocol.h"
++#include "wine/vulkan_driver.h"
 +
 +#include "openxr_private.h"
 +
@@ -12563,13 +12606,10 @@ index 00000000000..a37eceb0516
 +    {"XR_KHR_win32_convert_performance_counter_time", "XR_KHR_convert_timespec_time", TRUE, TRUE},
 +};
 +
-+struct openxr_instance_funcs g_xr_host_instance_dispatch_table;
++static XrResult (*p_xrConvertTimespecTimeToTimeKHR)(XrInstance, const struct timespec *, XrTime *);
++static XrResult (*p_xrConvertTimeToTimespecTimeKHR)(XrInstance, XrTime, struct timespec *);
 +
-+VkDevice (*get_native_VkDevice)(VkDevice);
-+VkInstance (*get_native_VkInstance)(VkInstance);
-+VkPhysicalDevice (*get_native_VkPhysicalDevice)(VkPhysicalDevice);
-+VkPhysicalDevice (*get_wrapped_VkPhysicalDevice)(VkInstance, VkPhysicalDevice);
-+VkQueue (*get_native_VkQueue)(VkQueue);
++struct openxr_instance_funcs g_xr_host_instance_dispatch_table;
 +
 +XrResult WINAPI wine_xrCreateInstance(const XrInstanceCreateInfo *createInfo, XrInstance *instance) {
 +  XrResult res;
@@ -12626,6 +12666,12 @@ index 00000000000..a37eceb0516
 +  ALL_XR_INSTANCE_FUNCS()
 +#undef USE_XR_FUNC
 +
++  /* These will be NULL if XR_KHR_convert_timespec_time is not available. */
++  xrGetInstanceProcAddr(*instance, "xrConvertTimespecTimeToTimeKHR",
++                        (PFN_xrVoidFunction *)&p_xrConvertTimespecTimeToTimeKHR);
++  xrGetInstanceProcAddr(*instance, "xrConvertTimeToTimespecTimeKHR",
++                        (PFN_xrVoidFunction *)&p_xrConvertTimeToTimespecTimeKHR);
++
 +cleanup:
 +  free((void *)our_createInfo.enabledExtensionNames);
 +  return res;
@@ -12643,9 +12689,9 @@ index 00000000000..a37eceb0516
 +        const XrGraphicsBindingVulkanKHR *their_vk_binding = (const XrGraphicsBindingVulkanKHR *)createInfo->next;
 +
 +        our_vk_binding = *their_vk_binding;
-+        our_vk_binding.instance = get_native_VkInstance(their_vk_binding->instance);
-+        our_vk_binding.physicalDevice = get_native_VkPhysicalDevice(their_vk_binding->physicalDevice);
-+        our_vk_binding.device = get_native_VkDevice(their_vk_binding->device);
++        our_vk_binding.instance = vulkan_instance_from_handle(their_vk_binding->instance)->host.instance;
++        our_vk_binding.physicalDevice = vulkan_physical_device_from_handle(their_vk_binding->physicalDevice)->host.physical_device;
++        our_vk_binding.device = vulkan_device_from_handle(their_vk_binding->device)->host.device;
 +
 +        our_create_info = *createInfo;
 +        our_create_info.next = &our_vk_binding;
@@ -12735,6 +12781,21 @@ index 00000000000..a37eceb0516
 +  return XR_SUCCESS;
 +}
 +
++static VkPhysicalDevice get_client_physical_device( VkInstance handle, VkPhysicalDevice host_physical_device )
++{
++    struct vulkan_instance *instance = vulkan_instance_from_handle( handle );
++    unsigned int i;
++
++    for (i = 0; i < instance->physical_device_count; ++i)
++    {
++        if (instance->physical_devices[i].host.physical_device == host_physical_device)
++            return instance->physical_devices[i].client.physical_device;
++    }
++
++    ERR( "Unknown native physical device: %p, instance %p, handle %p\n", host_physical_device, instance, handle );
++    return NULL;
++}
++
 +XrResult WINAPI wine_xrGetVulkanGraphicsDeviceKHR(XrInstance instance,
 +                                                  XrSystemId systemId,
 +                                                  VkInstance vkInstance,
@@ -12742,9 +12803,9 @@ index 00000000000..a37eceb0516
 +  XrResult res;
 +  TRACE("%p, 0x%s, %p, %p\n", instance, wine_dbgstr_longlong(systemId), vkInstance, vkPhysicalDevice);
 +  res = g_xr_host_instance_dispatch_table.p_xrGetVulkanGraphicsDeviceKHR(
-+      wine_instance_from_handle(instance)->host_instance, systemId, get_native_VkInstance(vkInstance),
++      wine_instance_from_handle(instance)->host_instance, systemId, vulkan_instance_from_handle(vkInstance)->host.instance,
 +      vkPhysicalDevice);
-+  *vkPhysicalDevice = get_wrapped_VkPhysicalDevice(vkInstance, *vkPhysicalDevice);
++  *vkPhysicalDevice = get_client_physical_device(vkInstance, *vkPhysicalDevice);
 +  return res;
 +}
 +
@@ -12761,12 +12822,12 @@ index 00000000000..a37eceb0516
 +  }
 +
 +  our_getinfo = *getInfo;
-+  our_getinfo.vulkanInstance = get_native_VkInstance(our_getinfo.vulkanInstance);
++  our_getinfo.vulkanInstance = vulkan_instance_from_handle(our_getinfo.vulkanInstance)->host.instance;
 +
 +  res = g_xr_host_instance_dispatch_table.p_xrGetVulkanGraphicsDevice2KHR(
 +      wine_instance_from_handle(instance)->host_instance, &our_getinfo, vulkanPhysicalDevice);
 +  if (res == XR_SUCCESS) {
-+    *vulkanPhysicalDevice = get_wrapped_VkPhysicalDevice(getInfo->vulkanInstance, *vulkanPhysicalDevice);
++    *vulkanPhysicalDevice = get_client_physical_device(getInfo->vulkanInstance, *vulkanPhysicalDevice);
 +  }
 +  return res;
 +}
@@ -12876,47 +12937,92 @@ index 00000000000..a37eceb0516
 +
 +NTSTATUS init_openxr(void *args) {
 +  struct init_openxr_params *params = args;
-+  NTSTATUS status;
-+  unixlib_handle_t unix_funcs;
-+  Dl_info info;
-+  void *unix_handle;
-+
-+  status = NtQueryVirtualMemory(GetCurrentProcess(), params->winevulkan,
-+                                (MEMORY_INFORMATION_CLASS)1000 /*MemoryWineUnixFuncs*/, &unix_funcs, sizeof(unix_funcs),
-+                                NULL);
-+  if (status) {
-+    ERR("NtQueryVirtualMemory status %#x.\n", (int)status);
-+    return status;
-+  }
-+
-+  if (!dladdr((void *)(ULONG_PTR)unix_funcs, &info)) {
-+    ERR("dladdr failed.\n");
-+    return STATUS_INVALID_PARAMETER;
-+  }
-+
-+  TRACE("path %s.\n", info.dli_fname);
-+  if (!(unix_handle = dlopen(info.dli_fname, RTLD_NOW))) {
-+    ERR("dlopen failed.\n");
-+    return STATUS_INVALID_PARAMETER;
-+  }
-+
-+#define L(name)                                      \
-+  if (!(name = dlsym(unix_handle, "__wine_" #name))) \
-+    ERR("%s not found.\n", #name);
-+
-+  L(get_native_VkDevice);
-+  L(get_native_VkInstance);
-+  L(get_native_VkPhysicalDevice);
-+  L(get_wrapped_VkPhysicalDevice);
-+  L(get_native_VkQueue);
-+#undef L
-+
-+  dlclose(unix_handle);
 +
 +  params->create_instance_callback = (UINT64)&vk_create_instance_callback;
 +  params->create_device_callback = (UINT64)&vk_create_device_callback;
 +
 +  return STATUS_SUCCESS;
++}
++
++/* Constants for time conversion - matches Wine's ntdll/unix/sync.c */
++#define NANOSECONDS_IN_A_SECOND 1000000000
++#define TICKSPERSEC             10000000
++
++static LONGLONG qpc_to_monotonic_offset(void)
++{
++  LARGE_INTEGER qpc;
++  struct timespec ts;
++  LONGLONG monotonic_qpc;
++
++  NtQueryPerformanceCounter(&qpc, NULL);
++  clock_gettime(CLOCK_MONOTONIC, &ts);
++  monotonic_qpc = (ULONGLONG)ts.tv_sec * TICKSPERSEC + ts.tv_nsec / (NANOSECONDS_IN_A_SECOND / TICKSPERSEC);
++
++  return qpc.QuadPart - monotonic_qpc;
++}
++
++XrResult wine_xrConvertWin32PerformanceCounterToTimeKHR(XrInstance instance,
++                                                        const LARGE_INTEGER *performanceCounter,
++                                                        XrTime *time) {
++  wine_XrInstance *wine_instance = wine_instance_from_handle(instance);
++  struct timespec ts;
++  LONGLONG monotonic_qpc;
++  XrResult res;
++
++  TRACE("instance %p, performanceCounter %p (%lld), time %p\n",
++        instance, performanceCounter,
++        performanceCounter ? (long long)performanceCounter->QuadPart : 0, time);
++
++  if (!performanceCounter || !time)
++    return XR_ERROR_VALIDATION_FAILURE;
++
++  if (!p_xrConvertTimespecTimeToTimeKHR) {
++    WARN("XR_KHR_convert_timespec_time not available, cannot convert time.\n");
++    return XR_ERROR_FUNCTION_UNSUPPORTED;
++  }
++
++  monotonic_qpc = performanceCounter->QuadPart - qpc_to_monotonic_offset();
++
++  ts.tv_sec = monotonic_qpc / TICKSPERSEC;
++  ts.tv_nsec = (monotonic_qpc % TICKSPERSEC) * (NANOSECONDS_IN_A_SECOND / TICKSPERSEC);
++
++  res = p_xrConvertTimespecTimeToTimeKHR(wine_instance->host_instance, &ts, time);
++  if (res != XR_SUCCESS)
++    WARN("xrConvertTimespecTimeToTimeKHR failed: %d\n", res);
++
++  return res;
++}
++
++XrResult wine_xrConvertTimeToWin32PerformanceCounterKHR(XrInstance instance,
++                                                        XrTime time,
++                                                        LARGE_INTEGER *performanceCounter) {
++  wine_XrInstance *wine_instance = wine_instance_from_handle(instance);
++  struct timespec ts;
++  LONGLONG monotonic_qpc;
++  XrResult res;
++
++  TRACE("instance %p, time %lld, performanceCounter %p\n",
++        instance, (long long)time, performanceCounter);
++
++  if (!performanceCounter)
++    return XR_ERROR_VALIDATION_FAILURE;
++
++  if (!p_xrConvertTimeToTimespecTimeKHR) {
++    WARN("XR_KHR_convert_timespec_time not available, cannot convert time.\n");
++    return XR_ERROR_FUNCTION_UNSUPPORTED;
++  }
++
++  res = p_xrConvertTimeToTimespecTimeKHR(wine_instance->host_instance, time, &ts);
++  if (res != XR_SUCCESS) {
++    WARN("xrConvertTimeToTimespecTimeKHR failed: %d\n", res);
++    return res;
++  }
++
++  monotonic_qpc = (ULONGLONG)ts.tv_sec * TICKSPERSEC +
++                  ts.tv_nsec / (NANOSECONDS_IN_A_SECOND / TICKSPERSEC);
++  performanceCounter->QuadPart = monotonic_qpc + qpc_to_monotonic_offset();
++
++  return XR_SUCCESS;
 +}
 +
 +NTSTATUS is_available_instance_function_openxr(void *args)
@@ -12947,10 +13053,10 @@ index 00000000000..a37eceb0516
 +}
 diff --git a/dlls/wineopenxr/openxr_loader.c b/dlls/wineopenxr/openxr_loader.c
 new file mode 100644
-index 00000000000..14dffd725f1
+index 00000000000..e6ee007dad2
 --- /dev/null
 +++ b/dlls/wineopenxr/openxr_loader.c
-@@ -0,0 +1,2015 @@
+@@ -0,0 +1,2008 @@
 +#include <stdlib.h>
 +
 +#include "initguid.h"
@@ -13831,6 +13937,15 @@ index 00000000000..14dffd725f1
 +    case VK_FORMAT_R16G16B16A16_SFLOAT:
 +      return DXGI_FORMAT_R16G16B16A16_FLOAT;
 +
++    case VK_FORMAT_R16G16B16A16_UNORM:
++      return DXGI_FORMAT_R16G16B16A16_UNORM;
++
++    case VK_FORMAT_R5G6B5_UNORM_PACK16:
++      return DXGI_FORMAT_B5G6R5_UNORM;
++
++    case VK_FORMAT_R32_SFLOAT:
++      return DXGI_FORMAT_R32_FLOAT;
++
 +    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
 +      return DXGI_FORMAT_R10G10B10A2_UNORM;
 +
@@ -14611,22 +14726,6 @@ index 00000000000..14dffd725f1
 +  return params.result;
 +}
 +
-+XrResult WINAPI xrConvertTimeToWin32PerformanceCounterKHR(XrInstance instance,
-+                                                          XrTime time,
-+                                                          LARGE_INTEGER *performanceCounter) {
-+  FIXME("unimplemented\n");
-+  /* FIXME */
-+  return XR_ERROR_INITIALIZATION_FAILED;
-+}
-+
-+XrResult WINAPI xrConvertWin32PerformanceCounterToTimeKHR(XrInstance instance,
-+                                                          const LARGE_INTEGER *performanceCounter,
-+                                                          XrTime *time) {
-+  FIXME("unimplemented\n");
-+  /* FIXME */
-+  return XR_ERROR_INITIALIZATION_FAILED;
-+}
-+
 +XrResult WINAPI xrGetD3D11GraphicsRequirementsKHR(XrInstance instance,
 +                                                  XrSystemId systemId,
 +                                                  XrGraphicsRequirementsD3D11KHR *graphicsRequirements) {
@@ -14736,8 +14835,8 @@ index 00000000000..14dffd725f1
 +
 +  vulkan_create_info = *createInfo->vulkanCreateInfo;
 +  callback.sType = VK_STRUCTURE_TYPE_CREATE_INFO_WINE_INSTANCE_CALLBACK;
-+  callback.native_create_callback = (PFN_native_vkCreateInstance)g_vk_create_instance_callback;
-+  callback.context = &context;
++  callback.native_create_callback = g_vk_create_instance_callback;
++  callback.context = (UINT64)&context;
 +  callback.pNext = vulkan_create_info.pNext;
 +  vulkan_create_info.pNext = &callback;
 +
@@ -14771,8 +14870,8 @@ index 00000000000..14dffd725f1
 +
 +  vulkan_create_info = *createInfo->vulkanCreateInfo;
 +  callback.sType = VK_STRUCTURE_TYPE_CREATE_INFO_WINE_DEVICE_CALLBACK;
-+  callback.native_create_callback = (PFN_native_vkCreateDevice)g_vk_create_device_callback;
-+  callback.context = &context;
++  callback.native_create_callback = g_vk_create_device_callback;
++  callback.context = (UINT64)&context;
 +  callback.pNext = vulkan_create_info.pNext;
 +  vulkan_create_info.pNext = &callback;
 +
@@ -15167,10 +15266,10 @@ index 00000000000..18e064a77a1
 +#endif /* __WINE_OPENXR_PRIVATE_H */
 diff --git a/dlls/wineopenxr/openxr_thunks.c b/dlls/wineopenxr/openxr_thunks.c
 new file mode 100644
-index 00000000000..4773fbb692c
+index 00000000000..66b03232cba
 --- /dev/null
 +++ b/dlls/wineopenxr/openxr_thunks.c
-@@ -0,0 +1,5448 @@
+@@ -0,0 +1,5474 @@
 +/* Automatically generated from Vulkan xr.xml; DO NOT EDIT!
 + *
 + * This file is generated from Vulkan xr.xml file covered
@@ -15420,6 +15519,30 @@ index 00000000000..4773fbb692c
 +    TRACE("%p, %p\n", params->sceneObserver, params->computeInfo);
 +
 +    params->result = g_xr_host_instance_dispatch_table.p_xrComputeNewSceneMSFT(params->sceneObserver, params->computeInfo);
++    return STATUS_SUCCESS;
++}
++#endif /* _WIN64 */
++
++#ifdef _WIN64
++static NTSTATUS thunk64_xrConvertTimeToWin32PerformanceCounterKHR(void *args)
++{
++    struct xrConvertTimeToWin32PerformanceCounterKHR_params *params = args;
++
++    TRACE("%p, 0x%s, %p\n", params->instance, wine_dbgstr_longlong(params->time), params->performanceCounter);
++
++    params->result = wine_xrConvertTimeToWin32PerformanceCounterKHR(params->instance, params->time, params->performanceCounter);
++    return STATUS_SUCCESS;
++}
++#endif /* _WIN64 */
++
++#ifdef _WIN64
++static NTSTATUS thunk64_xrConvertWin32PerformanceCounterToTimeKHR(void *args)
++{
++    struct xrConvertWin32PerformanceCounterToTimeKHR_params *params = args;
++
++    TRACE("%p, %p, %p\n", params->instance, params->performanceCounter, params->time);
++
++    params->result = wine_xrConvertWin32PerformanceCounterToTimeKHR(params->instance, params->performanceCounter, params->time);
 +    return STATUS_SUCCESS;
 +}
 +#endif /* _WIN64 */
@@ -20232,6 +20355,8 @@ index 00000000000..4773fbb692c
 +    thunk64_xrChangeVirtualKeyboardTextContextMETA,
 +    thunk64_xrClearSpatialAnchorStoreMSFT,
 +    thunk64_xrComputeNewSceneMSFT,
++    thunk64_xrConvertTimeToWin32PerformanceCounterKHR,
++    thunk64_xrConvertWin32PerformanceCounterToTimeKHR,
 +    thunk64_xrCreateAction,
 +    thunk64_xrCreateActionSet,
 +    thunk64_xrCreateActionSpace,
@@ -20621,10 +20746,10 @@ index 00000000000..4773fbb692c
 +C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == unix_count);
 diff --git a/dlls/wineopenxr/openxr_thunks.h b/dlls/wineopenxr/openxr_thunks.h
 new file mode 100644
-index 00000000000..f487f96df6a
+index 00000000000..5f42ced9fa2
 --- /dev/null
 +++ b/dlls/wineopenxr/openxr_thunks.h
-@@ -0,0 +1,839 @@
+@@ -0,0 +1,841 @@
 +/* Automatically generated from Vulkan xr.xml; DO NOT EDIT!
 + *
 + * This file is generated from Vulkan xr.xml file covered
@@ -20652,6 +20777,8 @@ index 00000000000..f487f96df6a
 +#define WINE_XR_VERSION XR_API_VERSION_1_1
 +
 +/* Functions for which we have custom implementations outside of the thunks. */
++XrResult wine_xrConvertTimeToWin32PerformanceCounterKHR(XrInstance instance, XrTime time, LARGE_INTEGER *performanceCounter);
++XrResult wine_xrConvertWin32PerformanceCounterToTimeKHR(XrInstance instance, const LARGE_INTEGER *performanceCounter, XrTime *time);
 +XrResult wine_xrCreateInstance(const XrInstanceCreateInfo *createInfo, XrInstance *instance);
 +XrResult wine_xrCreateSession(XrInstance instance, const XrSessionCreateInfo *createInfo, XrSession *session);
 +XrResult wine_xrCreateSwapchain(XrSession session, const XrSwapchainCreateInfo *createInfo, XrSwapchain *swapchain);
@@ -31087,5 +31214,5 @@ index 00000000000..b82f743e53e
 +   }
 +}
 -- 
-2.52.0
+2.43.0
 
