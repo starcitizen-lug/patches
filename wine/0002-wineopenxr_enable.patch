@@ -26,7 +26,7 @@ https://github.com/ValveSoftware/wine/commit/f258a47db8e32fad8e7782ae55ae526e0e4
  dlls/winevulkan/vulkan.c        | 46 +++++++++++++++++++
  dlls/wow64/system.c             | 11 +++++
  include/wine/vulkan_driver.h    |  1 +
- include/winternl.h              |  3 +-
+ include/winternl.h              |  2 +
  loader/wine.inf.in              |  1 +
  15 files changed, 267 insertions(+), 7 deletions(-)
 
@@ -374,7 +374,7 @@ index 14dffd725f1..9b2c7ea2a09 100644
 +
 +    GetSystemDirectoryW(json_path, ARRAY_SIZE(json_path));
 +    lstrcatW(json_path, openxr_json_pathW);
-+    DeleteFileA(json_path);
++    DeleteFileW(json_path);
 +
 +    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, openxr_runtimeW, 0, KEY_SET_VALUE, &key) == ERROR_SUCCESS)
 +    {
@@ -559,14 +559,6 @@ index 80c295f0dce..d5283ff20c1 100644
  #ifdef _WIN64
  NTSYSAPI void      WINAPI RtlOpenCrossProcessEmulatorWorkConnection(HANDLE,HANDLE*,void**);
  NTSYSAPI NTSTATUS  WINAPI RtlWow64GetCpuAreaInfo(WOW64_CPURESERVED*,ULONG,WOW64_CPU_AREA_INFO*);
-@@ -5338,7 +5340,6 @@ NTSYSAPI LONGLONG  WINAPI RtlLargeIntegerSubtract(LONGLONG,LONGLONG);
- NTSYSAPI NTSTATUS  WINAPI RtlLargeIntegerToChar(const ULONGLONG *,ULONG,ULONG,PCHAR);
- #endif
- 
--
- /***********************************************************************
-  * Inline functions
-  */
 diff --git a/loader/wine.inf.in b/loader/wine.inf.in
 index 80a4a062351..f4e788e9210 100644
 --- a/loader/wine.inf.in
