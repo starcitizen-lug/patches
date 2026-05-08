@@ -149,8 +149,8 @@ index 6b8901da0f6..bda059b80e4 100644
 +    if ((callback = (VkCreateInfoWineInstanceCallback *)create_info->pNext)
 +            && callback->sType == VK_STRUCTURE_TYPE_CREATE_INFO_WINE_INSTANCE_CALLBACK)
 +    {
-+        native_create_instance = callback->native_create_callback;
-+        native_create_instance_context = callback->context;
++        native_create_instance = (void *)(UINT_PTR)callback->native_create_callback;
++        native_create_instance_context = (void *)(UINT_PTR)callback->context;
 +    }
 +
      if ((res = convert_instance_create_info( &pool, create_info, instance ))) goto failed;
@@ -236,8 +236,8 @@ index 6b8901da0f6..bda059b80e4 100644
 +    if ((callback = (VkCreateInfoWineDeviceCallback *)create_info->pNext)
 +            && callback->sType == VK_STRUCTURE_TYPE_CREATE_INFO_WINE_DEVICE_CALLBACK)
 +    {
-+        native_create_device = callback->native_create_callback;
-+        native_create_device_context = callback->context;
++        native_create_device = (void *)(UINT_PTR)callback->native_create_callback;
++        native_create_device_context = (void *)(UINT_PTR)callback->context;
 +    }
 +
      if ((res = convert_device_create_info( physical_device, create_info, &pool, device ))) goto failed;
@@ -441,18 +441,18 @@ index 792f1d955e2..78dd0177fac 100755
 +        f.write("                                                     void * (*)(VkInstance, const char *), void *);\n\n");
 +
 +        f.write("typedef struct VkCreateInfoWineDeviceCallback {\n");
-+        f.write("    VkStructureType             sType;\n");
-+        f.write("    const void*                 pNext;\n");
-+        f.write("    PFN_native_vkCreateDevice   native_create_callback;\n");
-+        f.write("    void*                       context;\n");
++        f.write("    VkStructureType sType;\n");
++        f.write("    const void*     pNext;\n");
++        f.write("    UINT64          native_create_callback;\n");
++        f.write("    UINT64          context;\n");
 +        f.write("} VkCreateInfoWineDeviceCallback;\n");
 +        f.write("#define VK_STRUCTURE_TYPE_CREATE_INFO_WINE_DEVICE_CALLBACK 2125312001\n\n");
 +
 +        f.write("typedef struct VkCreateInfoWineInstanceCallback {\n");
-+        f.write("    VkStructureType             sType;\n");
-+        f.write("    const void*                 pNext;\n");
-+        f.write("    PFN_native_vkCreateInstance native_create_callback;\n");
-+        f.write("    void*                       context;\n");
++        f.write("    VkStructureType sType;\n");
++        f.write("    const void*     pNext;\n");
++        f.write("    UINT64          native_create_callback;\n");
++        f.write("    UINT64          context;\n");
 +        f.write("} VkCreateInfoWineInstanceCallback;\n");
 +        f.write("#define VK_STRUCTURE_TYPE_CREATE_INFO_WINE_INSTANCE_CALLBACK 2125312002\n\n");
 +
