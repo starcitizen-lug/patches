@@ -12,8 +12,8 @@ index a189472..070bbb8 100644
 +            /* HACK: if user can not open this file, maybe pretend it's a bad device type */
 +            if (unopenable_device_is_bad == -1)
 +            {
-+                char *env = getenv("WINE_UNOPENABLE_DEVICE_IS_BAD");
-+                unopenable_device_is_bad = env ? atoi(env) : 0;
++                char *env = getenv("WINE_UNOPENABLE_DEVICE_IS_NOT_BAD");
++                unopenable_device_is_bad = env ? !atoi(env) : 1;
 +            }
 +            if (unopenable_device_is_bad != 0 && access(*unix_name, R_OK))
 +                return STATUS_BAD_DEVICE_TYPE;
