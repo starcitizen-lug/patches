@@ -1,0 +1,14 @@
+Gives the little systray window a title.
+diff --git a/programs/explorer/systray.c b/programs/explorer/systray.c
+index fcbceb6..0e5ece3 100644
+--- a/programs/explorer/systray.c
++++ b/programs/explorer/systray.c
+@@ -1253,7 +1253,7 @@ void initialize_systray( BOOL arg_using_root, BOOL arg_enable_shell, BOOL arg_sh
+     else
+     {
+         SIZE size = get_window_size();
+-        tray_window = CreateWindowExW( 0, shell_traywnd_class.lpszClassName, L"", WS_CAPTION | WS_SYSMENU,
++        tray_window = CreateWindowExW( 0, shell_traywnd_class.lpszClassName, L"Wine System Tray", WS_CAPTION | WS_SYSMENU,
+                                        CW_USEDEFAULT, CW_USEDEFAULT, size.cx, size.cy, 0, 0, 0, 0 );
+         NtUserMessageCall( tray_window, WINE_SYSTRAY_DOCK_INIT, 0, 0, NULL, NtUserSystemTrayCall, FALSE );
+     }
