@@ -1,0 +1,140 @@
+Once you go relative you never go back.
+Makes mousing around in Star Citizen not do crazy mouse movements.
+Does mean the cursor position can be offset if the window resizes without losing focus.
+But that can be fixed by unfocusing and focusing the window.
+Also confines the pointer if it's unconfined and a warp was requested.
+diff --git a/dlls/winewayland.drv/wayland_pointer.c b/dlls/winewayland.drv/wayland_pointer.c
+index 109dd2d..c3194c9 100644
+--- a/dlls/winewayland.drv/wayland_pointer.c
++++ b/dlls/winewayland.drv/wayland_pointer.c
+@@ -893,7 +893,7 @@ static void wayland_pointer_update_constraint(struct wl_surface *wl_surface,
+     needs_lock = wl_surface &&
+                  (((confine_rect || covers_vscreen) && !is_visible) || force_lock) &&
+                  pointer->wl_pointer;
+-    needs_confine = wl_surface && confine_rect && is_visible && !force_lock &&
++    needs_confine = wl_surface && (confine_rect || pointer->pending_warp) && is_visible && !force_lock &&
+                     pointer->wl_pointer;
+ 
+     if (!needs_confine && pointer->zwp_confined_pointer_v1)
+@@ -915,12 +915,15 @@ static void wayland_pointer_update_constraint(struct wl_surface *wl_surface,
+     if (needs_confine)
+     {
+         HWND hwnd = wl_surface_get_user_data(wl_surface);
+-        struct wl_region *region;
++        struct wl_region *region = NULL;
+ 
+-        region = wl_compositor_create_region(process_wayland.wl_compositor);
+-        wl_region_add(region, confine_rect->left, confine_rect->top,
+-                      confine_rect->right - confine_rect->left,
+-                      confine_rect->bottom - confine_rect->top);
++        if (confine_rect)
++        {
++            region = wl_compositor_create_region(process_wayland.wl_compositor);
++            wl_region_add(region, confine_rect->left, confine_rect->top,
++                        confine_rect->right - confine_rect->left,
++                        confine_rect->bottom - confine_rect->top);
++        }
+ 
+         if (!pointer->zwp_confined_pointer_v1 || pointer->constraint_hwnd != hwnd)
+         {
+@@ -940,14 +943,20 @@ static void wayland_pointer_update_constraint(struct wl_surface *wl_surface,
+             zwp_confined_pointer_v1_set_region(pointer->zwp_confined_pointer_v1,
+                                                region);
+         }
++        if (confine_rect)
++        {
++            TRACE("Confining to hwnd=%p wayland=%d,%d+%d,%d\n",
++                pointer->constraint_hwnd,
++                confine_rect->left, confine_rect->top,
++                confine_rect->right - confine_rect->left,
++                confine_rect->bottom - confine_rect->top);
++        }
++        else
++        {
++            TRACE("Confining to hwnd=%p due to warp\n", pointer->constraint_hwnd);
++        }
+ 
+-        TRACE("Confining to hwnd=%p wayland=%d,%d+%d,%d\n",
+-              pointer->constraint_hwnd,
+-              confine_rect->left, confine_rect->top,
+-              confine_rect->right - confine_rect->left,
+-              confine_rect->bottom - confine_rect->top);
+-
+-        wl_region_destroy(region);
++        if (region) wl_region_destroy(region);
+     }
+     else if (needs_lock)
+     {
+@@ -990,12 +999,6 @@ static void wayland_pointer_update_constraint(struct wl_surface *wl_surface,
+                                              &relative_pointer_v1_listener, NULL);
+         TRACE("Enabling relative motion\n");
+     }
+-    else if (!needs_relative && pointer->zwp_relative_pointer_v1)
+-    {
+-        zwp_relative_pointer_v1_destroy(pointer->zwp_relative_pointer_v1);
+-        pointer->zwp_relative_pointer_v1 = NULL;
+-        TRACE("Disabling relative motion\n");
+-    }
+ }
+ 
+ void wayland_pointer_clear_constraint(void)
+@@ -1021,11 +1024,6 @@ BOOL WAYLAND_SetCursorPos(INT x, INT y)
+     struct wayland_pointer *pointer = &process_wayland.pointer;
+ 
+     pthread_mutex_lock(&pointer->mutex);
+-    if (pointer->zwp_relative_pointer_v1)
+-    {
+-        pthread_mutex_unlock(&pointer->mutex);
+-        return FALSE;
+-    }
+     pointer->pending_warp = TRUE;
+     pthread_mutex_unlock(&pointer->mutex);
+ 
+@@ -1072,21 +1070,29 @@ BOOL WAYLAND_ClipCursor(const RECT *clip, BOOL reset)
+     {
+         if (process_wayland.wp_pointer_warp_v1)
+         {
+-            wp_pointer_warp_v1_warp_pointer(
+-                    process_wayland.wp_pointer_warp_v1,
+-                    wl_surface,
+-                    pointer->wl_pointer,
+-                    wl_fixed_from_int(warp_x),
+-                    wl_fixed_from_int(warp_y),
+-                    pointer->enter_serial);
+-            TRACE("warp_pointer hwnd=%p wayland_xy=%d,%d screen_xy=%d,%d\n",
+-                    hwnd, warp_x, warp_y, cursor_pos.x, cursor_pos.y);
++            if (!(hwnd == pointer->constraint_hwnd && pointer->zwp_locked_pointer_v1))
++            {
++                wp_pointer_warp_v1_warp_pointer(
++                        process_wayland.wp_pointer_warp_v1,
++                        wl_surface,
++                        pointer->wl_pointer,
++                        wl_fixed_from_int(warp_x),
++                        wl_fixed_from_int(warp_y),
++                        pointer->enter_serial);
++                TRACE("warp_pointer hwnd=%p wayland_xy=%d,%d screen_xy=%d,%d\n",
++                        hwnd, warp_x, warp_y, cursor_pos.x, cursor_pos.y);
++                if (pointer->zwp_confined_pointer_v1)
++                {
++                    pointer->pending_warp = FALSE;
++                    pthread_mutex_unlock(&pointer->mutex);
++                    return TRUE;
++                }
++            }
+         }
+         else
+         {
+             wayland_pointer_update_constraint(wl_surface, NULL, FALSE, TRUE);
+         }
+-        pointer->pending_warp = FALSE;
+     }
+ 
+     if (wl_surface && hwnd == pointer->constraint_hwnd && pointer->zwp_locked_pointer_v1)
+@@ -1112,6 +1118,7 @@ BOOL WAYLAND_ClipCursor(const RECT *clip, BOOL reset)
+                                       (clip && wl_surface) ? &confine_rect : NULL,
+                                       covers_vscreen,
+                                       FALSE);
++    pointer->pending_warp = FALSE;
+     pthread_mutex_unlock(&pointer->mutex);
+ 
+     wl_display_flush(process_wayland.wl_display);
