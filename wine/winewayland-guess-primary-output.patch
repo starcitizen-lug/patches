@@ -1,54 +1,54 @@
 Try to guess the primary output on Wayland.
 diff --git a/dlls/winewayland.drv/display.c b/dlls/winewayland.drv/display.c
-index b2a9428..5a1946b 100644
+index 1d46d64df6f..c17c3628074 100644
 --- a/dlls/winewayland.drv/display.c
 +++ b/dlls/winewayland.drv/display.c
-@@ -269,9 +269,11 @@ static void wayland_add_device_modes(const struct gdi_device_manager *device_man
+@@ -271,9 +271,10 @@ static void wayland_add_device_modes(const struct gdi_device_manager *device_man
  UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager, void *param)
  {
      struct wayland_output *output;
 -    DWORD state_flags = DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE;
 +    DWORD state_flags;
+     struct output_info *primary = NULL, *output_info;
      struct wl_array output_info_array;
-     struct output_info *output_info;
-+    struct output_info *primary_output_info = NULL;
 +    char *primary_output_override = getenv("WAYLANDDRV_PRIMARY_MONITOR");
  
      TRACE("\n");
  
-@@ -292,12 +294,35 @@ UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manage
+@@ -294,13 +295,35 @@ UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manage
      /* Populate GDI devices. */
      wayland_add_device_gpu(device_manager, param);
  
 +    /* Guess the primary output. */
      wl_array_for_each(output_info, &output_info_array)
      {
+-        if (!primary) primary = output_info;
 +        /* If an override is provided, use that. */
 +        if (primary_output_override && strcmp(primary_output_override, output_info->output->name) == 0)
 +        {
-+            primary_output_info = output_info;
++            primary = output_info;
 +            break;
 +        }
-+        if (primary_output_info == NULL)
++        if (primary == NULL)
 +        {
-+            primary_output_info = output_info;
++            primary = output_info;
 +            continue;
 +        }
 +        /* Assume the output with the widest resolution is the primary. */
-+        if (output_info->output->current_mode->width > primary_output_info->output->current_mode->width ||
-+            (output_info->output->current_mode->width == primary_output_info->output->current_mode->width &&
-+            output_info->output->current_mode->height > primary_output_info->output->current_mode->height))
-+            primary_output_info = output_info;
++        if (output_info->output->current_mode->width > primary->output->current_mode->width ||
++            (output_info->output->current_mode->width == primary->output->current_mode->width &&
++            output_info->output->current_mode->height > primary->output->current_mode->height))
++            primary = output_info;
 +    }
 +
 +    wl_array_for_each(output_info, &output_info_array)
 +    {
 +        state_flags = DISPLAY_DEVICE_ATTACHED_TO_DESKTOP;
-+        if (output_info == primary_output_info)
++        if (output_info == primary)
 +            state_flags |= DISPLAY_DEVICE_PRIMARY_DEVICE;
          wayland_add_device_source(device_manager, param, state_flags, output_info);
-         wayland_add_device_monitor(device_manager, param, output_info);
-         wayland_add_device_modes(device_manager, param, output_info);
+         wayland_add_device_monitor(device_manager, param, output_info, primary);
+         wayland_add_device_modes(device_manager, param, output_info, primary);
 -        state_flags &= ~DISPLAY_DEVICE_PRIMARY_DEVICE;
      }
  
