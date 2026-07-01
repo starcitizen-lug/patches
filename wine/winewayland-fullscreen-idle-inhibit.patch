@@ -1,0 +1,187 @@
+Makes it so windows that want to be fullscreen also inhibit idle.
+diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
+index 00dd005..1a574c2 100644
+--- a/dlls/winewayland.drv/Makefile.in
++++ b/dlls/winewayland.drv/Makefile.in
+@@ -12,6 +12,7 @@ SOURCES = \
+ 	display.c \
+ 	dllmain.c \
+ 	fractional-scale-v1.xml \
++	idle-inhibit-unstable-v1.xml \
+ 	opengl.c \
+ 	pointer-constraints-unstable-v1.xml \
+ 	pointer-warp-v1.xml \
+diff --git a/dlls/winewayland.drv/idle-inhibit-unstable-v1.xml b/dlls/winewayland.drv/idle-inhibit-unstable-v1.xml
+new file mode 100644
+index 0000000..9c06cdc
+--- /dev/null
++++ b/dlls/winewayland.drv/idle-inhibit-unstable-v1.xml
+@@ -0,0 +1,83 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<protocol name="idle_inhibit_unstable_v1">
++
++  <copyright>
++    Copyright © 2015 Samsung Electronics Co., Ltd
++
++    Permission is hereby granted, free of charge, to any person obtaining a
++    copy of this software and associated documentation files (the "Software"),
++    to deal in the Software without restriction, including without limitation
++    the rights to use, copy, modify, merge, publish, distribute, sublicense,
++    and/or sell copies of the Software, and to permit persons to whom the
++    Software is furnished to do so, subject to the following conditions:
++
++    The above copyright notice and this permission notice (including the next
++    paragraph) shall be included in all copies or substantial portions of the
++    Software.
++
++    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
++    DEALINGS IN THE SOFTWARE.
++  </copyright>
++
++  <interface name="zwp_idle_inhibit_manager_v1" version="1">
++    <description summary="control behavior when display idles">
++      This interface permits inhibiting the idle behavior such as screen
++      blanking, locking, and screensaving.  The client binds the idle manager
++      globally, then creates idle-inhibitor objects for each surface.
++
++      Warning! The protocol described in this file is experimental and
++      backward incompatible changes may be made. Backward compatible changes
++      may be added together with the corresponding interface version bump.
++      Backward incompatible changes are done by bumping the version number in
++      the protocol and interface names and resetting the interface version.
++      Once the protocol is to be declared stable, the 'z' prefix and the
++      version number in the protocol and interface names are removed and the
++      interface version number is reset.
++    </description>
++
++    <request name="destroy" type="destructor">
++      <description summary="destroy the idle inhibitor object">
++	Destroy the inhibit manager.
++      </description>
++    </request>
++
++    <request name="create_inhibitor">
++      <description summary="create a new inhibitor object">
++	Create a new inhibitor object associated with the given surface.
++      </description>
++      <arg name="id" type="new_id" interface="zwp_idle_inhibitor_v1"/>
++      <arg name="surface" type="object" interface="wl_surface"
++	   summary="the surface that inhibits the idle behavior"/>
++    </request>
++
++  </interface>
++
++  <interface name="zwp_idle_inhibitor_v1" version="1">
++    <description summary="context object for inhibiting idle behavior">
++      An idle inhibitor prevents the output that the associated surface is
++      visible on from being set to a state where it is not visually usable due
++      to lack of user interaction (e.g. blanked, dimmed, locked, set to power
++      save, etc.)  Any screensaver processes are also blocked from displaying.
++
++      If the surface is destroyed, unmapped, becomes occluded, loses
++      visibility, or otherwise becomes not visually relevant for the user, the
++      idle inhibitor will not be honored by the compositor; if the surface
++      subsequently regains visibility the inhibitor takes effect once again.
++      Likewise, the inhibitor isn't honored if the system was already idled at
++      the time the inhibitor was established, although if the system later
++      de-idles and re-idles the inhibitor will take effect.
++    </description>
++
++    <request name="destroy" type="destructor">
++      <description summary="destroy the idle inhibitor object">
++	Remove the inhibitor effect from the associated wl_surface.
++      </description>
++    </request>
++
++  </interface>
++</protocol>
+diff --git a/dlls/winewayland.drv/wayland.c b/dlls/winewayland.drv/wayland.c
+index 5b2b0c5..69b7235 100644
+--- a/dlls/winewayland.drv/wayland.c
++++ b/dlls/winewayland.drv/wayland.c
+@@ -215,6 +215,11 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
+         process_wayland.wp_fractional_scale_manager_v1 =
+             wl_registry_bind(registry, id, &wp_fractional_scale_manager_v1_interface, 1);
+     }
++    else if (strcmp(interface, "zwp_idle_inhibit_manager_v1") == 0)
++    {
++        process_wayland.zwp_idle_inhibit_manager_v1 =
++            wl_registry_bind(registry, id, &zwp_idle_inhibit_manager_v1_interface, 1);
++    }
+ }
+ 
+ static void registry_handle_global_remove(void *data, struct wl_registry *registry,
+diff --git a/dlls/winewayland.drv/wayland_surface.c b/dlls/winewayland.drv/wayland_surface.c
+index 0dae092..ee0ade4 100644
+--- a/dlls/winewayland.drv/wayland_surface.c
++++ b/dlls/winewayland.drv/wayland_surface.c
+@@ -457,6 +457,12 @@ void wayland_surface_clear_role(struct wayland_surface *surface)
+             xdg_surface_destroy(surface->xdg_surface);
+             surface->xdg_surface = NULL;
+         }
++
++        if (surface->zwp_idle_inhibitor_v1)
++        {
++            zwp_idle_inhibitor_v1_destroy(surface->zwp_idle_inhibitor_v1);
++            surface->zwp_idle_inhibitor_v1 = NULL;
++        }
+         break;
+ 
+     case WAYLAND_SURFACE_ROLE_SUBSURFACE:
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index e0df8e5..aac8950 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -41,6 +41,7 @@
+ #include "pointer-warp-v1-client-protocol.h"
+ #include "alpha-modifier-v1-client-protocol.h"
+ #include "fractional-scale-v1-client-protocol.h"
++#include "idle-inhibit-unstable-v1-client-protocol.h"
+ 
+ #include "windef.h"
+ #include "winbase.h"
+@@ -184,6 +185,7 @@ struct wayland
+     struct wp_cursor_shape_manager_v1 *wp_cursor_shape_manager_v1;
+     struct wp_pointer_warp_v1 *wp_pointer_warp_v1;
+     struct wp_alpha_modifier_v1 *wp_alpha_modifier_v1;
++    struct zwp_idle_inhibit_manager_v1 *zwp_idle_inhibit_manager_v1;
+     struct wayland_seat seat;
+     struct wayland_keyboard keyboard;
+     struct wayland_pointer pointer;
+@@ -287,6 +289,7 @@ struct wayland_surface
+             struct xdg_surface *xdg_surface;
+             struct xdg_toplevel *xdg_toplevel;
+             struct xdg_toplevel_icon_v1 *xdg_toplevel_icon;
++            struct zwp_idle_inhibitor_v1 *zwp_idle_inhibitor_v1;
+         };
+         struct
+         {
+diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
+index afef743..1566d02 100644
+--- a/dlls/winewayland.drv/window.c
++++ b/dlls/winewayland.drv/window.c
+@@ -295,6 +295,19 @@ static void wayland_surface_update_state_toplevel(struct wayland_surface *surfac
+         {
+             xdg_toplevel_set_minimized(surface->xdg_toplevel);
+         }
++
++        if (process_wayland.zwp_idle_inhibit_manager_v1)
++        {
++            if (surface->window.state & WAYLAND_SURFACE_CONFIG_STATE_FULLSCREEN && !surface->zwp_idle_inhibitor_v1)
++            {
++                surface->zwp_idle_inhibitor_v1 = zwp_idle_inhibit_manager_v1_create_inhibitor(process_wayland.zwp_idle_inhibit_manager_v1, surface->wl_surface);
++            }
++            else if (!(surface->window.state & WAYLAND_SURFACE_CONFIG_STATE_FULLSCREEN) && surface->zwp_idle_inhibitor_v1)
++            {
++                zwp_idle_inhibitor_v1_destroy(surface->zwp_idle_inhibitor_v1);
++                surface->zwp_idle_inhibitor_v1 = NULL;
++            }
++        }
+     }
+     else
+     {
