@@ -1,9 +1,8 @@
-From f1c428cbc1cd26c7ed73462b0ddf80bdb275322e Mon Sep 17 00:00:00 2001
-From: Jack Greiner <jack@emoss.org>
-Date: Thu, 22 Jan 2026 11:22:05 -0500
+From d67ed2c3ed45c8f479d4e251a036f6d3761f3a96 Mon Sep 17 00:00:00 2001
+From: mactan-sc <77816662+mactan-sc@users.noreply.github.com>
+Date: Sat, 18 Jul 2026 10:17:10 -0500
 Subject: [PATCH] Append commands
 
-Inspired by https://github.com/ValveSoftware/wine/commit/d7ba7d8ffd88d1c2f637af90cc13730d1c0c43ea ... append commands to fixes some issues depending on the display system in use.
 ---
  dlls/ntdll/env.c             | 57 ++++++++++++++++++++++++++++++++++--
  programs/explorer/desktop.c  |  3 ++
@@ -11,10 +10,10 @@ Inspired by https://github.com/ValveSoftware/wine/commit/d7ba7d8ffd88d1c2f637af9
  3 files changed, 59 insertions(+), 3 deletions(-)
 
 diff --git a/dlls/ntdll/env.c b/dlls/ntdll/env.c
-index dd4f9c244f7..77306a6c88a 100644
+index d6c5fb7c01a..1d98d537dc3 100644
 --- a/dlls/ntdll/env.c
 +++ b/dlls/ntdll/env.c
-@@ -672,6 +672,50 @@ void WINAPI RtlDestroyProcessParameters( RTL_USER_PROCESS_PARAMETERS *params )
+@@ -671,6 +671,50 @@ void WINAPI RtlDestroyProcessParameters( RTL_USER_PROCESS_PARAMETERS *params )
      RtlFreeHeap( GetProcessHeap(), 0, params );
  }
  
@@ -65,16 +64,16 @@ index dd4f9c244f7..77306a6c88a 100644
  
  /***********************************************************************
   *           init_user_process_params
-@@ -683,7 +727,7 @@ void init_user_process_params(void)
+@@ -682,7 +726,7 @@ void init_user_process_params(void)
      WCHAR *env;
      SIZE_T size = 0, env_size;
      RTL_USER_PROCESS_PARAMETERS *new_params, *params = NtCurrentTeb()->Peb->ProcessParameters;
--    UNICODE_STRING curdir;
-+    UNICODE_STRING curdir, *cmdline, x;
+-    UNICODE_STRING curdir = { 0 };
++    UNICODE_STRING curdir = { 0 }, *cmdline, x;
  
      /* environment needs to be a separate memory block */
      env_size = params->EnvironmentSize;
-@@ -693,11 +737,15 @@ void init_user_process_params(void)
+@@ -692,12 +736,16 @@ void init_user_process_params(void)
          else env[0] = 0;
      }
  
@@ -82,18 +81,19 @@ index dd4f9c244f7..77306a6c88a 100644
 +    x = hack_append_command_line( env, params->ImagePathName, params->CommandLine );
 +    if (x.Buffer) cmdline = &x;
 +
+     curdir.MaximumLength = params->CurrentDirectory.DosPath.MaximumLength;
      if (!(new_params = alloc_process_params( 1, &params->ImagePathName, &params->DllPath,
--                                             &params->CurrentDirectory.DosPath, &params->CommandLine,
-+                                             &params->CurrentDirectory.DosPath, cmdline,
+-                                             &curdir, &params->CommandLine,
++                                             &curdir, cmdline,
                                               NULL, &params->WindowTitle, &params->Desktop,
                                               &params->ShellInfo, &params->RuntimeInfo )))
 -        return;
 +        goto done;
  
      new_params->Environment     = env;
-     new_params->DebugFlags      = params->DebugFlags;
+     new_params->Flags           = params->Flags;
 @@ -729,4 +777,7 @@ void init_user_process_params(void)
-     }
+     NtFreeVirtualMemory( GetCurrentProcess(), (void **)&params, &size, MEM_RELEASE );
      set_wow64_environment( &new_params->Environment );
      new_params->EnvironmentSize = RtlSizeHeap( GetProcessHeap(), 0, new_params->Environment );
 +
@@ -115,10 +115,10 @@ index ce70c5dd79d..84c0814ec08 100644
                guid->Data4[0], guid->Data4[1], guid->Data4[2], guid->Data4[3],
                guid->Data4[4], guid->Data4[5], guid->Data4[6], guid->Data4[7] );
 diff --git a/programs/wineboot/wineboot.c b/programs/wineboot/wineboot.c
-index 8359e5d4c44..465657ade75 100644
+index aa91d01c92f..4a7ea0d3af5 100644
 --- a/programs/wineboot/wineboot.c
 +++ b/programs/wineboot/wineboot.c
-@@ -1629,6 +1629,8 @@ static void update_wineprefix( BOOL force )
+@@ -1661,6 +1661,8 @@ static void update_wineprefix( BOOL force )
      int fd;
      struct stat st;
  
@@ -128,5 +128,5 @@ index 8359e5d4c44..465657ade75 100644
      {
          WINE_MESSAGE( "wine: failed to update %s, wine.inf not found\n", debugstr_w( config_dir ));
 -- 
-2.52.0
+2.55.0
 
