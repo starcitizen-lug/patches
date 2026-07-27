@@ -1,69 +1,159 @@
-From dabda0ac41a6ceb186e9bfe8929eed9e40065aad Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jack Greiner <jack@emoss.org>
-Date: Thu, 22 Jan 2026 10:53:43 -0500
+Date: Mon, 27 Jul 2026 16:20:00 -0400
 Subject: [PATCH] ntdll: Cache memory info to improve performance.
 
-This improves the speed of get_committed_size which assists in Star Citizen in loading correctly with various debugging bits enabled.
+Star Citizen profiles every Wwise allocation, so VirtualQuery is called thousands of
+times a second and the get_vprot_range_size() walk in get_committed_size() becomes a
+bottleneck, made worse by EAC hooking the APIs the profiler calls along the way.
+
+Cache the extent of the uniform-protection run each query resolves. Any later query
+landing inside that run is answered without walking the page table: every page in a
+run shares one masked protection byte and the run ends at the same address wherever
+it is entered, so the cached answer is identical to the one the scan would produce.
+
+The run is validated against a generation counter bumped whenever a page protection
+byte changes, rather than a wall-clock window, so a commit, decommit or protection
+change can never be served a stale region size or state. VPROT_WRITEWATCH is exempt
+from the bump since it is masked out of the run comparison and no field of
+MEMORY_BASIC_INFORMATION derives from it.
 ---
- dlls/ntdll/unix/virtual.c | 28 +++++++++++++++++++++++++++-
- 1 file changed, 27 insertions(+), 1 deletion(-)
+ dlls/ntdll/unix/virtual.c | 71 +++++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 62 insertions(+), 9 deletions(-)
 
 diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
-index e733e3ffdd6..c8c85e07cf7 100644
+index db820a89525..f64ef8b8a2f 100644
 --- a/dlls/ntdll/unix/virtual.c
 +++ b/dlls/ntdll/unix/virtual.c
-@@ -129,6 +129,10 @@ struct file_view
+@@ -128,6 +128,13 @@ struct file_view
      void         *base;          /* base address */
      size_t        size;          /* size in bytes */
      unsigned int  protect;       /* protection for all pages at allocation time and SEC_* flags */
-+    SIZE_T        last_committed_size;
-+    void         *last_query_base;
-+    unsigned long long last_commit_size_check;
-+    BYTE          first_page_vprot;
++    /* Cached result of the last fill_basic_memory_info() page table walk over this view.
++     * Star Citizen profiles every Wwise allocation, which drives VirtualQuery thousands of
++     * times a second and makes the get_vprot_range_size() scan a bottleneck. */
++    char              *query_run_start;  /* first page of the cached uniform protection run */
++    char              *query_run_end;    /* end of that run, NULL when the cache is empty */
++    unsigned long long query_run_gen;    /* value of vprot_gen when the run was computed */
++    BYTE               query_run_vprot;  /* protection byte shared by every page in the run */
  };
  
  /* per-page protection flags */
-@@ -1848,6 +1852,8 @@ static NTSTATUS create_view( struct file_view **view_ret, void *base, size_t siz
-     view->base    = base;
-     view->size    = size;
-     view->protect = vprot;
-+    view->last_commit_size_check = 0;
-+    view->last_query_base = NULL;
-     if (use_kernel_writewatch) vprot &= ~VPROT_WRITEWATCH;
-     set_page_vprot( base, size, vprot );
- 
-@@ -5406,6 +5412,12 @@ NTSTATUS WINAPI NtProtectVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_T
-     return status;
+@@ -1178,6 +1185,12 @@ static SIZE_T get_vprot_range_size( char *base, SIZE_T size, BYTE mask, BYTE *vp
+     return size;
  }
  
-+static unsigned long long get_current_millis(void)
-+{
-+    struct timespec cur_time;
-+    clock_gettime(CLOCK_MONOTONIC, &cur_time);
-+    return cur_time.tv_sec * 1000 + (cur_time.tv_nsec / 1000000);
-+}
++/* Bumped whenever a page protection byte changes in a way that can move the run
++ * boundaries get_vprot_range_size() reports. VPROT_WRITEWATCH is exempt: it is masked
++ * out of the run comparison and no MEMORY_BASIC_INFORMATION field derives from it.
++ * Guarded by virtual_mutex along with the page table itself. */
++static unsigned long long vprot_gen = 1;
++
+ /***********************************************************************
+  *           set_page_vprot
+  *
+@@ -1188,6 +1201,7 @@ static void set_page_vprot( const void *addr, size_t size, BYTE vprot )
+     size_t idx = (size_t)addr >> page_shift;
+     size_t end = ((size_t)addr + size + page_mask) >> page_shift;
  
- static unsigned int fill_basic_memory_info( const void *addr, MEMORY_BASIC_INFORMATION *info )
++    vprot_gen++;
+ #ifdef _WIN64
+     while (idx >> pages_vprot_shift != end >> pages_vprot_shift)
+     {
+@@ -1212,6 +1226,10 @@ static void set_page_vprot_bits( const void *addr, size_t size, BYTE set, BYTE c
+     size_t idx = (size_t)addr >> page_shift;
+     size_t end = ((size_t)addr + size + page_mask) >> page_shift;
+ 
++    /* Software write watch toggles VPROT_WRITEWATCH constantly. Leaving the generation
++     * alone for it keeps those updates from flushing the query cache. */
++    if ((set | clear) & ~VPROT_WRITEWATCH) vprot_gen++;
++
+ #ifdef _WIN64
+     for ( ; idx < end; idx++)
+     {
+@@ -1750,20 +1768,29 @@ static void unmap_area( void *start, size_t size )
+  */
+ static struct file_view *alloc_view(void)
  {
-@@ -5512,7 +5524,21 @@ static unsigned int fill_basic_memory_info( const void *addr, MEMORY_BASIC_INFOR
++    struct file_view *ret;
++
+     if (next_free_view)
+     {
+-        struct file_view *ret = next_free_view;
++        ret = next_free_view;
+         next_free_view = *(struct file_view **)ret;
+-        return ret;
+     }
+-    if (view_block_start == view_block_end)
++    else
+     {
+-        void *ptr = anon_mmap_alloc( view_block_size, PROT_READ | PROT_WRITE );
+-        if (ptr == MAP_FAILED) return NULL;
+-        view_block_start = ptr;
+-        view_block_end = view_block_start + view_block_size / sizeof(*view_block_start);
++        if (view_block_start == view_block_end)
++        {
++            void *ptr = anon_mmap_alloc( view_block_size, PROT_READ | PROT_WRITE );
++            if (ptr == MAP_FAILED) return NULL;
++            view_block_start = ptr;
++            view_block_end = view_block_start + view_block_size / sizeof(*view_block_start);
++        }
++        ret = view_block_start++;
+     }
+-    return view_block_start++;
++    /* free_view() only overwrites the first pointer of the struct, so a recycled view
++     * still carries the previous occupant's cached run. Clear it here rather than in
++     * create_view(), which remove_pages_from_view() bypasses. */
++    ret->query_run_start = ret->query_run_end = NULL;
++    return ret;
+ }
+ 
+ 
+@@ -2497,6 +2524,10 @@ static NTSTATUS remove_pages_from_view( struct file_view *view, char *base, size
+ {
+     assert( size < view->size );
+ 
++    /* The view is about to be resized, so a run cached against its old extent could
++     * reach past the new end. */
++    view->query_run_start = view->query_run_end = NULL;
++
+     if (view->base != base && base + size != (char *)view->base + view->size)
+     {
+         struct file_view *new_view = alloc_view();
+@@ -2659,6 +2690,7 @@ static NTSTATUS coalesce_placeholders( struct file_view *view, char *base, size_
+     }
+ 
+     unregister_view( view );
++    view->query_run_start = view->query_run_end = NULL;
+     view->size = views_size;
+     register_view( view );
+ 
+@@ -5728,7 +5760,28 @@ static unsigned int fill_basic_memory_info( const void *addr, MEMORY_BASIC_INFOR
          BYTE vprot;
  
          info->AllocationBase = alloc_base;
 -        info->RegionSize = get_committed_size( view, base, ~(size_t)0, &vprot, ~VPROT_WRITEWATCH );
-+        if (get_current_millis() - view->last_commit_size_check < 4 &&
-+            base >= (char *)view->last_query_base &&
-+            base < (char *)view->last_query_base + view->last_committed_size)
++        if (view->query_run_gen == vprot_gen && base >= view->query_run_start && base < view->query_run_end)
 +        {
-+            info->RegionSize = view->last_committed_size - (base - (char *)view->last_query_base);
-+            vprot = view->first_page_vprot;
++            /* Every page in the run shares one masked protection byte, and the run ends at
++             * the same address wherever it is entered, so this is the answer the scan would
++             * have produced. get_win32_prot() and the State test below only read bits that
++             * the ~VPROT_WRITEWATCH mask compares, so the whole run maps to one result. */
++            info->RegionSize = view->query_run_end - base;
++            vprot = view->query_run_vprot;
 +        }
 +        else
 +        {
 +            info->RegionSize = get_committed_size( view, base, ~(size_t)0, &vprot, ~VPROT_WRITEWATCH );
-+            view->last_committed_size = info->RegionSize;
-+            view->last_query_base = base;
-+            view->first_page_vprot = vprot;
-+            view->last_commit_size_check = get_current_millis();
++            /* SEC_RESERVE sizes come from the server and can change with no local
++             * protection change, so vprot_gen cannot vouch for them. */
++            if (!(view->protect & SEC_RESERVE))
++            {
++                view->query_run_start = base;
++                view->query_run_end   = base + info->RegionSize;
++                view->query_run_vprot = vprot;
++                view->query_run_gen   = vprot_gen;
++            }
 +        }
          info->State = (vprot & VPROT_COMMITTED) ? MEM_COMMIT : MEM_RESERVE;
          info->Protect = (vprot & VPROT_COMMITTED) ? get_win32_prot( vprot, view->protect ) : 0;
