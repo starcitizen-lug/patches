@@ -1,9 +1,9 @@
 Makes it so windows that want to be fullscreen also inhibit idle.
 diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
-index 00dd005..1a574c2 100644
+index 411d045..13dd8d3 100644
 --- a/dlls/winewayland.drv/Makefile.in
 +++ b/dlls/winewayland.drv/Makefile.in
-@@ -12,6 +12,7 @@ SOURCES = \
+@@ -13,6 +13,7 @@ SOURCES = \
  	display.c \
  	dllmain.c \
  	fractional-scale-v1.xml \
@@ -101,12 +101,12 @@ index 0000000..9c06cdc
 +  </interface>
 +</protocol>
 diff --git a/dlls/winewayland.drv/wayland.c b/dlls/winewayland.drv/wayland.c
-index 52ba39c..b0c96a1 100644
+index 118ee2d..d852638 100644
 --- a/dlls/winewayland.drv/wayland.c
 +++ b/dlls/winewayland.drv/wayland.c
-@@ -215,6 +215,11 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
-         process_wayland.wp_fractional_scale_manager_v1 =
-             wl_registry_bind(registry, id, &wp_fractional_scale_manager_v1_interface, 1);
+@@ -223,6 +223,11 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
+         wp_color_manager_v1_add_listener(process_wayland.wp_color_manager_v1,
+                                          &color_manager_listener, NULL);
      }
 +    else if (strcmp(interface, "zwp_idle_inhibit_manager_v1") == 0)
 +    {
@@ -117,10 +117,10 @@ index 52ba39c..b0c96a1 100644
      else if (strcmp(interface, "wl_fixes") == 0)
      {
 diff --git a/dlls/winewayland.drv/wayland_surface.c b/dlls/winewayland.drv/wayland_surface.c
-index 6a5f3f3..c894972 100644
+index b32a43f..70d1f82 100644
 --- a/dlls/winewayland.drv/wayland_surface.c
 +++ b/dlls/winewayland.drv/wayland_surface.c
-@@ -455,6 +455,12 @@ void wayland_surface_clear_role(struct wayland_surface *surface)
+@@ -544,6 +544,12 @@ void wayland_surface_clear_role(struct wayland_surface *surface)
              xdg_surface_destroy(surface->xdg_surface);
              surface->xdg_surface = NULL;
          }
@@ -134,26 +134,26 @@ index 6a5f3f3..c894972 100644
  
      case WAYLAND_SURFACE_ROLE_SUBSURFACE:
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
-index 303efce..0f23b7e 100644
+index 1cb525b..ed7b81e 100644
 --- a/dlls/winewayland.drv/waylanddrv.h
 +++ b/dlls/winewayland.drv/waylanddrv.h
-@@ -41,6 +41,7 @@
- #include "pointer-warp-v1-client-protocol.h"
+@@ -42,6 +42,7 @@
  #include "alpha-modifier-v1-client-protocol.h"
  #include "fractional-scale-v1-client-protocol.h"
+ #include "color-management-v1-client-protocol.h"
 +#include "idle-inhibit-unstable-v1-client-protocol.h"
  
  #include "windef.h"
  #include "winbase.h"
-@@ -185,6 +186,7 @@ struct wayland
-     struct wp_cursor_shape_manager_v1 *wp_cursor_shape_manager_v1;
+@@ -187,6 +188,7 @@ struct wayland
      struct wp_pointer_warp_v1 *wp_pointer_warp_v1;
      struct wp_alpha_modifier_v1 *wp_alpha_modifier_v1;
+     struct wp_color_manager_v1 *wp_color_manager_v1;
 +    struct zwp_idle_inhibit_manager_v1 *zwp_idle_inhibit_manager_v1;
      struct wayland_seat seat;
      struct wayland_keyboard keyboard;
      struct wayland_pointer pointer;
-@@ -291,6 +293,7 @@ struct wayland_surface
+@@ -294,6 +296,7 @@ struct wayland_surface
              struct xdg_surface *xdg_surface;
              struct xdg_toplevel *xdg_toplevel;
              struct xdg_toplevel_icon_v1 *xdg_toplevel_icon;
