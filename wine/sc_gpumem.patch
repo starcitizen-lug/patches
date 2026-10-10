@@ -24,7 +24,7 @@ index baf99f69291..d838e720b1e 100644
 +        if (desc->PrivateDriverDataSize < sizeof(*node) * 2)
 +            return STATUS_INVALID_PARAMETER;
 +
-+        if (!(adapter = get_d3dkmt_object( desc->hAdapter, D3DKMT_ADAPTER )) || !adapter->physical_device)
++        if (!(adapter = get_d3dkmt_adapter( desc->hAdapter )) || !adapter->physical_device)
 +            return STATUS_NOT_IMPLEMENTED;
 +
 +        memset( node, 0, desc->PrivateDriverDataSize );
@@ -71,7 +71,7 @@ index baf99f69291..d838e720b1e 100644
 +
 +        if (NtGdiDdDDIOpenAdapterFromLuid( &adp ) == STATUS_SUCCESS)
 +        {
-+            if ((adapter = get_d3dkmt_object( adp.hAdapter, D3DKMT_ADAPTER )) && (physical_device = adapter->physical_device))
++            if ((adapter = get_d3dkmt_adapter( adp.hAdapter )) && (physical_device = adapter->physical_device))
 +            {
 +                struct vulkan_instance *instance = physical_device->instance;
 +                VkPhysicalDeviceMemoryBudgetPropertiesEXT mem_budget = {0};
